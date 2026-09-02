@@ -15,9 +15,13 @@ A faceless content channel project built around four equal content pillars:
 - [`SYSTEM.md`](./SYSTEM.md) — architecture, directory structure, content
   lifecycle
 - [`STATE.md`](./STATE.md) — current project status and next task
+- [`templates/`](./templates/) — the content-item schema every piece of
+  content is built from (idea → research → script → review → QA →
+  publication → learning)
 
 ## Current phase
 
-Foundational documentation and directory structure only. No implementation
-code, dependencies, or automation exist yet. Publishing is, and will remain,
-human-gated — see `CONSTITUTION.md`.
+Content intelligence architecture: documentation and templates only. No
+implementation code, dependencies, automation, or external API integration
+exist yet. Publishing is, and will remain, human-gated — see
+`CONSTITUTION.md`.
