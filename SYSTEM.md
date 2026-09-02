@@ -5,18 +5,22 @@ Operational architecture for the AI Faceless Channel project. Governed by
 
 ## Current phase
 
-**Phase 6 complete: automated review layer.** Three independent review
-agents plus a thin orchestrator have working, tested implementations,
-stdlib Python, no dependencies: the Research / Fact-Check Agent
-(`agents/researcher/src/`, FACT_CHECK mode only), the Safety Reviewer
-(`agents/safety/src/`, SAFETY_REVIEW only), the Originality Reviewer
-(`agents/originality/src/`, ORIGINALITY_REVIEW only), and the Unified
-Automated Review Orchestrator (`agents/orchestrator/src/`), which runs
-the three in order and aggregates their results — it makes no
-safety/factual/originality judgment of its own; see
-`agents/orchestrator/CONTRACT.md`. Everything else remains
+**Phase 6 complete (automated review layer); Phase 7 foundation
+established (production stack contracts).** Four review/coordination
+agents have working, tested implementations, stdlib Python, no
+dependencies: the Research / Fact-Check Agent (`agents/researcher/src/`,
+FACT_CHECK mode only), the Safety Reviewer (`agents/safety/src/`,
+SAFETY_REVIEW only), the Originality Reviewer (`agents/originality/src/`,
+ORIGINALITY_REVIEW only), and the Unified Automated Review Orchestrator
+(`agents/orchestrator/src/`), which runs the three in order and
+aggregates their results — it makes no safety/factual/originality
+judgment of its own; see `agents/orchestrator/CONTRACT.md`. Phase 7 adds
+the production-record schema (`templates/PRODUCTION.md`/`SCENE.md`/
+`ASSET.md`/`VOICE.md`) and three production agent contracts
+(`agents/producer/`, `agents/voice/`, `agents/visual-planner/`) —
+**contracts only, no implementations yet.** Everything else remains
 documentation/templates only: no RESEARCH-mode live retrieval, no
-editorial/production-QA agents, no video generation, no automation/
+editorial/production-QA agents, no media generation, no automation/
 scheduling, no publishing, no external API integration. Nothing outside
 `agents/researcher/`, `agents/safety/`, `agents/originality/`, and
 `agents/orchestrator/` executes.
@@ -35,7 +39,11 @@ scheduling, no publishing, no external API integration. Nothing outside
 │   ├── CLAIM.md
 │   ├── SCRIPT.md
 │   ├── REVIEW.md
-│   └── VIDEO_QA.md
+│   ├── VIDEO_QA.md
+│   ├── PRODUCTION.md         Production record (Phase 7)
+│   ├── SCENE.md               Per-scene record (Phase 7)
+│   ├── ASSET.md                Per-asset record + provenance (Phase 7)
+│   └── VOICE.md                Voiceover record, provider-agnostic (Phase 7)
 ├── agents/                  Agent contracts + implementations
 │   ├── researcher/            Research / Fact-Check Agent
 │   │   ├── CONTRACT.md           Design contract
@@ -52,11 +60,14 @@ scheduling, no publishing, no external API integration. Nothing outside
 │   │   ├── README.md             How to run it, module map, limitations
 │   │   ├── src/                  MVP implementation (ORIGINALITY_REVIEW only)
 │   │   └── tests/                Unit + integration tests
-│   └── orchestrator/           Unified Automated Review Orchestrator
-│       ├── CONTRACT.md           Design contract (coordination only)
-│       ├── README.md             How to run it, module map, limitations
-│       ├── src/                  Runs the three agents in order, aggregates results
-│       └── tests/                Unit + integration tests
+│   ├── orchestrator/           Unified Automated Review Orchestrator
+│   │   ├── CONTRACT.md           Design contract (coordination only)
+│   │   ├── README.md             How to run it, module map, limitations
+│   │   ├── src/                  Runs the three agents in order, aggregates results
+│   │   └── tests/                Unit + integration tests
+│   ├── producer/               Producer (Phase 7 — contract only, no src/)
+│   ├── voice/                   Voice (Phase 7 — contract only, no src/)
+│   └── visual-planner/          Visual Planner (Phase 7 — contract only, no src/)
 └── content/                Content pillar folders (structure only, no code)
     ├── business-stories/
     ├── history/
@@ -107,11 +118,45 @@ stages via the existing agents and stops at the first one that doesn't
 `PASS` — see `agents/orchestrator/CONTRACT.md`'s pipeline diagram. A
 clean run of all three reaches `AUTOMATED_REVIEW_COMPLETE`, which is not
 itself a `status` value — it only means the content item is ready for the
-still fully human-driven `HUMAN_REVIEW` stage. Every stage from
-`PRODUCTION` onward remains unimplemented — schema only. `APPROVED`
-requires human sign-off (`templates/VIDEO_QA.md` final approval) and
-precedes `PUBLISHED`; publishing will never be automated per
-`CONSTITUTION.md` rule 2.
+still fully human-driven `HUMAN_REVIEW` stage. The `PRODUCTION` stage now
+has a schema (see "Production layer" below) but no implementation.
+`APPROVED` requires human sign-off (`templates/VIDEO_QA.md` final
+approval) and precedes `PUBLISHED`; publishing will never be automated
+per `CONSTITUTION.md` rule 2.
+
+## Production layer (Phase 7 — schema only, no implementation)
+
+Once a content item reaches `status = APPROVED`, `templates/PRODUCTION.md`
+defines a **separate, more granular lifecycle** for turning its script
+into an actual video — separate on purpose, so production work never
+has authority over content review/approval or publishing:
+
+```
+PRODUCTION_PLANNING → VOICE → VISUAL_PLANNING → ASSET_COLLECTION →
+ASSEMBLY → CAPTIONS → THUMBNAIL → METADATA → PRODUCTION_QA →
+HUMAN_REVIEW → APPROVED → READY_TO_PUBLISH
+```
+
+`READY_TO_PUBLISH` is the last state any production agent may ever set —
+actual publishing is a separate, human-driven action with its own
+(not yet built) system, outside this entire phase. A content item's own
+`HUMAN_REVIEW`/`APPROVED` `status` values and this production lifecycle's
+same-named states are deliberately distinct — see `templates/PRODUCTION.md`'s
+"Separation from content lifecycle."
+
+`templates/SCENE.md` records the video as data — narration, timing,
+visual type/description, asset requirement, captions, transitions, and
+claim references per scene — so a future renderer can assemble a video
+from structured records rather than reinterpreting prose.
+`templates/ASSET.md` requires every representational asset to be
+classified `AUTHENTIC_HISTORICAL_MEDIA` or `GENERATED_RECONSTRUCTION`
+(never left implicit), so generated imagery can never be silently
+presented as real historical footage. `templates/VOICE.md` is
+provider-agnostic — no TTS/voice vendor is named anywhere in the schema.
+
+Three agent contracts exist for this layer (`agents/producer/`,
+`agents/voice/`, `agents/visual-planner/`) — **none are implemented
+yet**; see "Agent contracts" below.
 
 ## Agent contracts
 
@@ -144,6 +189,17 @@ how a future orchestrator would run every stage in sequence.
   `--apply` happens through the invoked agent's own existing write path.
   Reuses (never duplicates) each agent's own hashing to skip re-running a
   stage that already has a fresh, unstale `PASS` on file.
+- `agents/producer/CONTRACT.md` — Producer (Phase 7, **not
+  implemented**): turns an `APPROVED` script into `PRODUCTION.md` +
+  `scenes/*.md`. Requires content `status = APPROVED`; never writes to
+  `CONTENT_ITEM.md`, changes a claim, or bypasses human approval.
+- `agents/voice/CONTRACT.md` — Voice (Phase 7, **not implemented**):
+  narration → voiceover audio, provider-agnostic. Never alters narration
+  meaning or inserts unsupported claims.
+- `agents/visual-planner/CONTRACT.md` — Visual Planner (Phase 7, **not
+  implemented**): finalizes each scene's visual requirement and creates
+  `assets/*.md` records. Never presents generated media as authentic,
+  never invents historical evidence beyond what claims establish.
 
 All agents: never run unless explicitly invoked (no scheduling, no
 triggers); `--apply` is opt-in, a dry run is the default; never touch
@@ -162,7 +218,12 @@ triggers); `--apply` is opt-in, a dry run is the default; never touch
   and reference material.
 - No editorial/production-QA agents yet, so the orchestrator only
   coordinates the three stages that exist.
-- No video generation, no external API integration (e.g. YouTube).
+- No production agent implementations yet (`producer`/`voice`/
+  `visual-planner` are contracts only) — no media generation frameworks,
+  no TTS integration, no image/video generation integration, no
+  stock-media crawler, no FFmpeg/assembly infrastructure.
+- No external API integration (e.g. YouTube), no analytics, no learning
+  engine.
 - No production or publishing pipeline. Reaching
-  `AUTOMATED_REVIEW_COMPLETE` never advances `status` — that stays
-  human/owner-approval-gated.
+  `AUTOMATED_REVIEW_COMPLETE` or `READY_TO_PUBLISH` never advances
+  `status` or publishes anything — both stay human/owner-approval-gated.

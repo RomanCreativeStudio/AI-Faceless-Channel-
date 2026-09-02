@@ -29,13 +29,28 @@ override it. No agent has publishing authority, ever, at any stage.
   `orchestrator/CONTRACT.md`'s "Important distinction." Has a working
   MVP (`orchestrator/src/`, `orchestrator/README.md`).
 
+Three more have **contracts only, no implementation yet** — Phase 7's
+foundation for the production stack, which starts once a content item
+reaches `status = APPROVED` and is a separate lifecycle from everything
+above (see `templates/PRODUCTION.md`):
+
+- [`producer/`](./producer/) — turns an approved script into
+  `PRODUCTION.md` + `scenes/*.md`. Never writes to `CONTENT_ITEM.md`,
+  changes a claim, or bypasses human approval.
+- [`voice/`](./voice/) — narration → voiceover audio, provider-agnostic
+  (no vendor named anywhere in the contract). Never alters narration
+  meaning or inserts unsupported claims.
+- [`visual-planner/`](./visual-planner/) — finalizes each scene's visual
+  requirement and creates `assets/*.md` records. Never presents generated
+  media as authentic, never invents historical evidence.
+
 ## Not yet specified
 
-Script drafting, editorial review, and production QA remain fully
-human-driven until a contract is written and approved here (the
-orchestrator's pipeline stops before them — see below). Publication
-remains human-gated permanently, by `CONSTITUTION.md` rule 2, regardless
-of what gets automated upstream of it — see `STATE.md` for what's next.
+Editorial review and production QA remain fully human-driven until a
+contract is written and approved here (the orchestrator's pipeline stops
+before them). Publication remains human-gated permanently, by
+`CONSTITUTION.md` rule 2, regardless of what gets automated upstream of
+it — see `STATE.md` for what's next.
 
 ## The pipeline sequence, and the shared interface shape
 
@@ -101,3 +116,21 @@ their logic) plus the same generic pieces from `researcher/src`; it has
 **no `mutate.py` of its own** — every write under `--apply` happens
 inside the invoked agent's own existing path. No agent requires any other
 to run first or to exist at all.
+
+## The production lifecycle (Phase 7 — schema only)
+
+```
+PRODUCTION_PLANNING → VOICE → VISUAL_PLANNING → ASSET_COLLECTION →
+ASSEMBLY → CAPTIONS → THUMBNAIL → METADATA → PRODUCTION_QA →
+HUMAN_REVIEW → APPROVED → READY_TO_PUBLISH
+```
+
+Owned by `templates/PRODUCTION.md`, tracked entirely separately from the
+content-review `status` above — no production agent writes to
+`CONTENT_ITEM.md` at all. `producer/` → `voice/` → `visual-planner/` map
+onto the first three states; the rest have neither an agent nor an
+implementation yet. `READY_TO_PUBLISH` is the last state any of this may
+ever reach — actual publishing is a separate, human-driven system, not
+built in this phase or any so far. See
+`content/what-if/wi-20260902-black-death-modern-medicine/PRODUCTION.md`
+for a golden fixture demonstrating the schema against real content.
