@@ -144,3 +144,40 @@ deferred-schema-question objectives:
 See `agents/researcher/CONTRACT.md` for the first agent contract, which
 this sample's structure (research → claims → script → pending fact-check)
 was designed to exercise once that agent exists.
+
+## Phase 6 addendum
+
+Phase 5's Research/Fact-Check MVP found a real, previously-unnoticed
+Atomicity violation in `claims/c5.md` while dry-running against this
+sample: two sentences (`check_atomicity` flagged "more than one
+sentence"). Corrected in Phase 6 via the same immutable-claim/
+supersession mechanism the Atomicity rule itself prescribes:
+
+- `c5.md`'s table left byte-identical; a trailing "Superseded" note
+  appended pointing to `c12`.
+- `c12.md` created: the same `ASSUMPTION`, same exclusion list, as one
+  sentence. `c5`'s second sentence ("These remain absent, consistent
+  with the real 14th-century technological base.") was not carried
+  forward as its own claim — it asserted nothing beyond what `c2`/`c11`
+  already establish as `FACT`, so manufacturing a claim just to preserve
+  the sentence would have been a needless, redundant atomic claim rather
+  than genuine content. This is a documented editorial judgment call, not
+  a silent drop.
+- References updated: `c6.md`'s `Derived from` field (a structured
+  relationship pointer, not this claim's own assertion) now cites `c12`;
+  `c6.md`'s `Exact claim`/`Evidence` prose still say "(c5)" inline and
+  were deliberately left untouched, since `c5.md` still exists and its
+  Superseded note resolves the reference — editing those fields would
+  have risked exactly the in-place claim rewrite the Atomicity rule
+  forbids. `c3.md`/`c2.md`'s trailing commentary and `SCRIPT.md`'s
+  `Verified claims` table/ASSUMPTION bullet were updated (neither is a
+  protected claim field).
+- No claim's `Classification` changed. No evidence was fabricated to
+  paper over the correction. `CONTENT_ITEM.md`'s Notes/history log
+  records the full correction.
+
+This is the second time a golden-sample defect has been found by running
+the actual tooling against it rather than by inspection alone (the first
+was `c3` in Phase 4, before the Atomicity rule existed at all) — direct
+evidence the rule and the immutability mechanism both work as intended
+under real conditions, not just in the abstract.

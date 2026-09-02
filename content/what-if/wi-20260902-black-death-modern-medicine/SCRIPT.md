@@ -32,7 +32,7 @@ still no antibiotics, vaccines, diagnostics, or hospitals?
 3. **The hypothetical, defined precisely** — name exactly what knowledge
    is being granted (germ theory, case tracking, sanitation, quarantine
    capability) and exactly what is withheld (antibiotics, vaccines,
-   diagnostics, pharmaceutical manufacturing, hospitals). — claims: `c4`, `c5`
+   diagnostics, pharmaceutical manufacturing, hospitals). — claims: `c4`, `c12`
 4. **What plausibly changes** — earlier identification and isolation of
    cases could reduce transmission chains; but anyone infected still
    faces historically-grounded fatality risk, because there is still no
@@ -53,18 +53,21 @@ still no antibiotics, vaccines, diagnostics, or hospitals?
 | `c2` | `FACT` | `UNVERIFIED` | 2 |
 | `c3` | `FACT` | `UNVERIFIED` | 4 |
 | `c4` | `ASSUMPTION` | `NOT_APPLICABLE` | 3 |
-| `c5` | `ASSUMPTION` | `NOT_APPLICABLE` | 3 |
 | `c6` | `INFERENCE` | `NOT_APPLICABLE` | 4 |
 | `c7` | `INFERENCE` | `NOT_APPLICABLE` | 5 |
 | `c8` | `SPECULATION` | `NOT_APPLICABLE` | 6 |
 | `c9` | `SPECULATION` | `NOT_APPLICABLE` | 6 |
 | `c10` | `FACT` | `UNVERIFIED` | 4 |
 | `c11` | `FACT` | `UNVERIFIED` | 4 |
+| `c12` | `ASSUMPTION` | `NOT_APPLICABLE` | 3 |
 
-All eleven claims are `UNVERIFIED`/`NOT_APPLICABLE` because this item has
-not reached `FACT_CHECK` status — see `CONTENT_ITEM.md`. (`c10`/`c11`
-were split from the original `c3` during the Phase 4 consistency check,
-per `templates/CLAIM.md`'s Atomicity rule — see `c3.md`'s revision note.)
+Twelve claims exist; `c5` is superseded (see `c5.md`) and no longer
+appears in this table — its successor `c12` does. The remaining eleven
+are `UNVERIFIED`/`NOT_APPLICABLE` because this item has not reached
+`FACT_CHECK` status — see `CONTENT_ITEM.md`. (`c10`/`c11` were split from
+the original `c3` during the Phase 4 consistency check; `c12` supersedes
+`c5` from a Phase 6 correction — both per `templates/CLAIM.md`'s
+Atomicity rule.)
 
 ## Transitions
 
@@ -119,7 +122,7 @@ and must be delivered with explicit hedging language ("it's hard to say,"
 - **ASSUMPTION** — This scenario grants germ theory, case tracking,
   sanitation, and quarantine capability (`c4`); it withholds antibiotics,
   vaccines, diagnostics, pharmaceutical manufacturing, and hospitals
-  (`c5`).
+  (`c12`, successor to superseded `c5`).
 - **INFERENCE** — Transmission chains could plausibly shrink, but
   infected individuals still face historical fatality risk absent a cure
   (`c6`); airborne pneumonic plague likely remains harder to contain than

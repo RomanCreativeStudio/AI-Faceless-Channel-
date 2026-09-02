@@ -18,10 +18,14 @@ A faceless content channel project built around four equal content pillars:
 - [`templates/`](./templates/) — the content-item schema every piece of
   content is built from (idea → research → script → review → QA →
   publication → learning)
+- [`agents/`](./agents/) — agent contracts and, for two agents so far,
+  working MVP implementations (Research/Fact-Check, Safety Reviewer)
 
 ## Current phase
 
-Content intelligence architecture: documentation and templates only. No
-implementation code, dependencies, automation, or external API integration
-exist yet. Publishing is, and will remain, human-gated — see
-`CONSTITUTION.md`.
+MVP automated review layer: two independent, tested agents
+(`agents/researcher/`, `agents/safety/`), stdlib Python, no dependencies,
+no scheduling — each runs only when explicitly invoked, dry run by
+default. No orchestrator, no other agents, no video production, no
+external API integration exist yet. Publishing is, and will remain,
+human-gated — see `CONSTITUTION.md`.

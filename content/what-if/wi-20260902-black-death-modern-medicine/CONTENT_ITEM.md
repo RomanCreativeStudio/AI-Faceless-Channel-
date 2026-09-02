@@ -45,7 +45,8 @@ deliberately stops before `FACT_CHECK`.
 ## Linked records
 
 - Research: `research/01-who-plague-fact-sheet.md`, `research/02-oxford-black-death-history.md`, `research/03-britannica-germ-theory.md`
-- Claims: `claims/c1.md` – `claims/c9.md`, `claims/c10.md`, `claims/c11.md`
+- Claims: `claims/c1.md` – `claims/c9.md`, `claims/c10.md`, `claims/c11.md`,
+  `claims/c12.md` (`c5` is superseded by `c12` — see `c5.md`)
 - Script: `SCRIPT.md`
 - Reviews: none yet (status has not reached `FACT_CHECK`)
 - Video QA: none yet (no production)
@@ -71,3 +72,17 @@ above and `claims/c8.md`, `claims/c9.md` for the modeled uncertainty.
   `research/01-who-plague-fact-sheet.md` updated accordingly. No
   `REVIEW.md` existed yet referencing the old `c3` text, so this was a
   direct fix rather than a superseded-claim record.
+- 2026-09-02 — Phase 6 correction: the Phase 5 Research/Fact-Check MVP's
+  dry run surfaced a genuine Atomicity rule violation in `c5` (two
+  sentences). Corrected via the immutable-claim/supersession mechanism —
+  `c5`'s table left untouched, a trailing "Superseded" note appended,
+  and a new atomic successor `c12` created (see `c5.md`, `c12.md`).
+  `c12`'s single sentence carries the exclusion list; `c5`'s redundant
+  second sentence was not carried forward as a separate claim (it added
+  no checkable content beyond `c2`/`c11`, already `FACT`) — see `c12.md`
+  and `AUDIT.md`'s Phase 6 addendum. References updated: `c6.md`'s
+  `Derived from` field (c5→c12; its `Exact claim`/`Evidence` prose left
+  untouched — see `c6.md`'s note), `c3.md`/`c2.md`'s trailing commentary,
+  and `SCRIPT.md`'s `Verified claims` table and ASSUMPTION bullet. No
+  fabricated evidence introduced; no other claim's classification or
+  wording changed.

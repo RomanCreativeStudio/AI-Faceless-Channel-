@@ -5,12 +5,16 @@ Operational architecture for the AI Faceless Channel project. Governed by
 
 ## Current phase
 
-**MVP Research / Fact-Check pipeline.** The first agent — FACT_CHECK mode
-only — has a working, tested implementation (`agents/researcher/src/`,
-stdlib Python, no dependencies). Everything else remains
-documentation/templates only: no RESEARCH-mode live retrieval, no other
+**MVP automated review layer.** Two independent agents have working,
+tested implementations, stdlib Python, no dependencies: the Research /
+Fact-Check Agent (`agents/researcher/src/`, FACT_CHECK mode only) and the
+Safety Reviewer (`agents/safety/src/`, SAFETY_REVIEW only). No
+orchestrator runs them in sequence yet — see `agents/README.md`'s shared
+interface convention. Everything else remains documentation/templates
+only: no RESEARCH-mode live retrieval, no originality/editorial/QA
 agents, no video generation, no automation/scheduling, no publishing, no
-external API integration. Nothing outside `agents/researcher/` executes.
+external API integration. Nothing outside `agents/researcher/` and
+`agents/safety/` executes.
 
 ## Directory structure
 
@@ -28,11 +32,16 @@ external API integration. Nothing outside `agents/researcher/` executes.
 │   ├── REVIEW.md
 │   └── VIDEO_QA.md
 ├── agents/                  Agent contracts + implementations
-│   └── researcher/            Research / Fact-Check Agent
-│       ├── CONTRACT.md          Design contract
-│       ├── README.md            How to run it, module map, limitations
-│       ├── src/                 MVP implementation (FACT_CHECK mode only)
-│       └── tests/               Unit + integration tests
+│   ├── researcher/            Research / Fact-Check Agent
+│   │   ├── CONTRACT.md           Design contract
+│   │   ├── README.md             How to run it, module map, limitations
+│   │   ├── src/                  MVP implementation (FACT_CHECK mode only)
+│   │   └── tests/                Unit + integration tests
+│   └── safety/                 Safety Reviewer
+│       ├── CONTRACT.md           Design contract
+│       ├── README.md             How to run it, module map, limitations
+│       ├── src/                  MVP implementation (SAFETY_REVIEW only)
+│       └── tests/                Unit + integration tests
 └── content/                Content pillar folders (structure only, no code)
     ├── business-stories/
     ├── history/
@@ -83,26 +92,36 @@ publishing will never be automated per `CONSTITUTION.md` rule 2.
 
 ## Agent contracts
 
-`agents/` holds specifications for future agents — what each is allowed
-and forbidden to do, and its exact handoff back into the pipeline. An
-agent may only be implemented once its contract exists and has been
-reviewed. See `agents/README.md`. The first contract,
-`agents/researcher/CONTRACT.md`, covers the Research / Fact-Check Agent
-(RESEARCH and FACT_CHECK stages). Its FACT_CHECK half now has a working
-MVP implementation (`agents/researcher/src/`) — see that directory's
-README for how to run it. It only ever touches `reviews/*.md` and two
-whitelisted `CONTENT_ITEM.md` fields; it never runs unless explicitly
-invoked (no scheduling, no triggers), and `--apply` is opt-in — a dry run
-is the default.
+`agents/` holds specifications for agents — what each is allowed and
+forbidden to do, and its exact handoff back into the pipeline. An agent
+may only be implemented once its contract exists and has been reviewed.
+See `agents/README.md`, including its shared result-shape convention for
+how a future orchestrator would run every stage in sequence.
+
+- `agents/researcher/CONTRACT.md` — Research / Fact-Check Agent (RESEARCH
+  and FACT_CHECK stages). FACT_CHECK has a working MVP
+  (`agents/researcher/src/`). Touches only `reviews/*.md` and two
+  whitelisted `CONTENT_ITEM.md` fields (`Research state`, `Fact-check
+  state`).
+- `agents/safety/CONTRACT.md` — Safety Reviewer (SAFETY_REVIEW stage).
+  Has a working MVP (`agents/safety/src/`). Touches only `reviews/*.md`
+  and one whitelisted `CONTENT_ITEM.md` field (`Safety state`); never
+  writes to a `claims/*.md` file.
+
+Both agents: never run unless explicitly invoked (no scheduling, no
+triggers); `--apply` is opt-in, a dry run is the default; never touch
+`status` or `Owner approval state`; never publish anything.
 
 ## Out of scope for this phase
 
-- No dependency installation (the MVP is stdlib Python only), no
+- No dependency installation (both MVPs are stdlib Python only), no
   frameworks.
-- No automation or scheduling — the agent only runs when explicitly
-  invoked by a human.
+- No automation or scheduling — agents only run when explicitly invoked
+  by a human.
 - No RESEARCH-mode implementation (source collection/live retrieval) —
-  FACT_CHECK mode only.
-- No other agents (script, safety, originality, production, QA), no video
+  FACT_CHECK mode only for the Research/Fact-Check Agent.
+- No orchestrator running the pipeline stages automatically in sequence
+  — each agent is invoked independently.
+- No originality/editorial/production-QA agents yet, no video
   generation, no external API integration (e.g. YouTube).
 - No production or publishing pipeline.

@@ -4,159 +4,154 @@ Last updated: 2026-09-02
 
 ## Phase
 
-**Phase 5 — MVP Research / Fact-Check Pipeline: complete.**
+**Phase 6 — Automated Review: Safety Reviewer — complete.**
 
-Phases 1-4 (foundational docs, content-item schema, golden sample
-validation, agent contracts) — complete, approved.
+Phases 1-5 (foundational docs, content-item schema, golden sample
+validation, agent contracts, MVP Research/Fact-Check pipeline) —
+complete, approved.
 
-## Completed (Phase 5)
+## Completed (Phase 6)
 
-**Template changes (made and documented before implementing, per the task
-instructions):**
-- `templates/REVIEW.md` — added `Reviewed content hash` field, closing
-  the hashing gap Phase 4 explicitly deferred to "agent implementation."
-  Multi-pass resolution rule 4 (PASS staleness) now names the exact hash
-  algorithm and points at `agents/researcher/src/hashing.py`.
-- `agents/researcher/CONTRACT.md` — added an "Implementation notes (Phase
-  5)" section: the `EvidenceSupport` vocabulary (`SUPPORTED` /
-  `PARTIALLY_SUPPORTED` / `UNSUPPORTED` / `CONTRADICTED` / `UNRESOLVED`)
-  the task asked for is computed, not a new persisted `CLAIM.md` field —
-  it's compatible with the existing templates without a schema change
-  (surfaced in `REVIEW.md`'s `Reasons`/JSON output instead); and the exact
-  verdict-derivation order the implementation follows.
-- `templates/CLAIM.md`/`CONTENT_ITEM.md` — **not** changed further; Phase
-  4's Atomicity and Multi-pass rules already covered what Phase 5 needed
-  to implement against.
+**Step 0 — Golden sample `c5` correction**, via the established
+immutable-claim/supersession mechanism (not a silent edit):
+- `claims/c5.md` — table left byte-identical; trailing "Superseded" note
+  appended pointing to `c12` (violation: two sentences, confirmed via
+  `agents/researcher/src/atomicity.py`).
+- `claims/c12.md` — new atomic successor: same `ASSUMPTION`, same
+  exclusion list, one sentence. `c5`'s redundant second sentence was not
+  carried forward as its own claim (documented reasoning in `c12.md` and
+  `AUDIT.md`'s Phase 6 addendum: it asserted nothing beyond what `c2`/`c11`
+  already establish as `FACT`).
+- References updated: `claims/c6.md`'s `Derived from` field (c5→c12; its
+  `Exact claim`/`Evidence` prose deliberately left untouched — `c5.md`
+  still resolves via its Superseded note); `claims/c3.md`/`c2.md`'s
+  trailing commentary; `SCRIPT.md`'s `Verified claims` table and
+  ASSUMPTION bullet; `CONTENT_ITEM.md`'s linked-records list and
+  Notes/history log; `AUDIT.md`'s new Phase 6 addendum.
+- Re-validated: atomicity is clean for all 11 active claims (only the
+  superseded `c5` itself still shows its original violation, correctly,
+  since it's out of the active review set); all 43 Researcher tests
+  still pass; no claim's `Classification`/`Exact claim` table field was
+  altered anywhere in the fix.
 
-**Implementation** (`agents/researcher/src/`, stdlib Python, no
-dependencies): `models.py`, `parsing.py`, `loader.py`, `atomicity.py`,
-`evidence.py`, `factcheck.py`, `multipass.py`, `hashing.py`,
-`review_writer.py`, `mutate.py`, `pipeline.py`, `__main__.py`, `errors.py`.
-Implements `CONTRACT.md`'s FACT_CHECK mode end-to-end: load a content
-item -> load research/claims -> validate structure (Atomicity rule) ->
-evaluate evidence (separated from fact-check status per the task's
-explicit design rule) -> derive a verdict -> write a `REVIEW.md` ->
-update only `Fact-check state` + Notes/history log. RESEARCH mode
-(source collection) is **not** implemented — out of scope per the task.
+**Step 1-6 — Safety Reviewer contract and MVP** (`agents/safety/`):
+- `CONTRACT.md` — independent SAFETY_REVIEW-stage contract: purpose,
+  inputs/outputs, allowed/forbidden actions (protected fields), the
+  twelve-signal model, risk levels, verdict derivation, human escalation
+  rules, conservatism principle, failure conditions, exact handoff,
+  relationship to `agents/researcher`.
+- `README.md` — how to run it, module map, design decisions, known
+  limitations.
+- `src/` (`models.py`, `loader.py`, `signals.py`, `review.py`,
+  `hashing.py`, `review_writer.py`, `mutate.py`, `pipeline.py`,
+  `__main__.py`) — stdlib Python, no dependencies. Reuses only
+  `agents/researcher/src`'s generic, role-agnostic infrastructure
+  (parsing, `ReviewVerdict`/`ReviewRecord`/`ContentItem`/`Classification`
+  models, multi-pass gating functions, failure-condition exceptions,
+  `append_notes_log`) — never its fact-check domain logic. Each agent
+  remains independently runnable.
+- `tests/` — 27 tests, all passing (see table below).
 
-**Tests** (`agents/researcher/tests/`, 43 tests, all passing): covers all
-15 required cases plus structural-failure and apply-mode integration
-coverage — see below.
+**Step 7 — Integration interface** (no orchestrator built): `agents/README.md`
+now documents the five-stage pipeline sequence and the shared result
+shape (`verdict`/`reasons`/`required_changes`/`escalate_to_human`/
+`content_hash`/`aborted`/`blocked`/`review_path`) both `run_fact_check`
+and `run_safety_review` already return, so a future orchestrator can
+drive any stage without knowing its internals.
 
-**Documentation:** `agents/researcher/README.md` (how to run it, module
-map, design decisions, known limitations); `SYSTEM.md` updated (directory
-structure, current phase, out-of-scope list); `STATE.md` (this file).
+**Step 8 — Documentation:** `SYSTEM.md` (directory structure, current
+phase, agent contracts section, out-of-scope list), `README.md` (root —
+also caught up to reflect Phase 5, which had been missed), `agents/README.md`,
+`STATE.md` (this file). No template changes were needed this phase beyond
+Step 0's content-only fix — `templates/REVIEW.md`'s `SAFETY_REVIEWER`
+role and `templates/CONTENT_ITEM.md`'s `Safety state` field already
+existed from Phase 2.
 
-## Tests created (all 15 required cases, plus extras)
+## Tests and results
 
-| # | Case | Test |
+| # | Case | Test file |
 |---|---|---|
-| 1-4 | Valid FACT/ASSUMPTION/INFERENCE/SPECULATION claims | `test_atomicity.py` |
-| 5 | Compound claim rejection | `test_atomicity.py` (uses the real pre-split `c3` text as a regression fixture) |
-| 6 | Missing source detection | `test_evidence.py` |
-| 7 | Unsupported claim detection | `test_evidence.py` |
-| 8 | Contradictory evidence detection | `test_evidence.py` |
-| 9 | Classification preservation | `test_evidence.py` |
-| 10 | Immutable claim correction/supersession | `test_mutate.py` |
-| 11 | REVISION_REQUIRED behavior | `test_multipass.py`, `test_pipeline_apply.py` |
-| 12 | Two autonomous attempts -> human escalation | `test_multipass.py`, `test_pipeline_apply.py` (end-to-end) |
-| 13 | REJECT terminal behavior | `test_multipass.py` |
-| 14 | PASS staleness on artifact change | `test_multipass.py` |
-| 15 | C11 unresolved, no fabricated evidence | `test_pipeline.py` (against the real golden sample) |
+| 1-4 | Business/history/technology PASS, labeled What If? PASS | `test_pass_scenarios.py` |
+| 5 | Dangerous instruction → REJECT | `test_signal_detection.py` |
+| 6 | Illegal facilitation → REJECT | `test_signal_detection.py` |
+| 7 | Synthetic media → disclosure/review signal | `test_signal_detection.py` |
+| 8 | Impersonation → REVISION_REQUIRED | `test_signal_detection.py` |
+| 9 | Misleading what-if title → REVISION_REQUIRED | `test_signal_detection.py` |
+| 10 | Unsupported certainty in hypothetical content → REVISION_REQUIRED | `test_signal_detection.py` |
+| 11 | Ambiguous (defamation) → escalate, never PASS | `test_signal_detection.py` |
+| 12 | Existing failure (REJECT) not silently cleared | `test_multipass.py` |
+| 13 | PASS becomes stale on content change | `test_multipass.py` |
+| 14 | Review attempts immutable/sequential | `test_multipass.py` |
+| 15 | Protected fields cannot be modified | `test_protected_fields.py` |
+| 16 | Dry-run does not modify content | `test_pipeline_apply.py` |
+| 17 | Apply mode modifies only permitted fields | `test_pipeline_apply.py` |
 
-Extra coverage: field-writer whitelist enforcement (`test_mutate.py`),
-structural failures — missing claim file, invalid classification, total
-retrieval failure (`test_structural_failures.py`), determinism and
-dry-run-doesn't-touch-disk (`test_pipeline.py`).
+Researcher: 43/43 passing (unchanged). Safety: 27/27 passing. Run:
+`python3 -m unittest discover -s agents/researcher/tests -t .` and
+`python3 -m unittest discover -s agents/safety/tests -t .`.
 
-Run: `python3 -m unittest discover -s agents/researcher/tests -t .`
+## Safety boundaries verified (Step 9)
 
-## Test results
+1. All 43 Researcher tests pass.
+2. All 27 Safety tests pass.
+3. Cross-repo consistency: 89 tracked files, no orphaned references
+   found (see validation transcript).
+4. `c5` correction verified: atomicity clean for all 11 active claims;
+   `c5` itself still correctly shows its original violation (superseded,
+   not in the active set).
+5. No claim's `Classification`/`Exact claim` table field changed anywhere
+   — `git diff` on every touched claim file shows only trailing-prose and
+   `Derived from` changes.
+6. No fabricated sources: the only 3 URLs anywhere in the golden sample
+   are the same WHO/Oxford/Britannica ones verified live in Phase 3.
+7. No publishing authority: no executable code anywhere in `agents/`
+   contains publish-capable logic.
+8. Safety's `CONTENT_ITEM_WRITABLE_FIELDS` is exactly `{'Safety state'}`;
+   it has no `update_claim_field` function at all — structurally cannot
+   write to a claim file.
+9. PASS-staleness confirmed end-to-end on a scratch copy: editing
+   `SCRIPT.md` after a review changes the recomputed hash, correctly
+   diverging from the stored `Reviewed content hash`.
+10. Review history confirmed immutable/sequential end-to-end: two
+    `--apply` runs on a scratch copy produced `safety_reviewer-1.md` and
+    `safety_reviewer-2.md`, with attempt 1's file unchanged after
+    attempt 2 ran.
 
-43/43 passing. Verified: fixture and golden-sample directories are
-byte-unchanged after the full suite runs (`git status --short content/`
-clean) — all mutation tests operate on `tempfile`/`shutil.copytree`
-copies, never the real fixture or golden sample.
-
-## Safety boundaries verified
-
-- **Never fabricates evidence.** Running against the real golden sample,
-  `c11` (no dedicated source, per the C11 sourcing rule in this phase's
-  instructions) evaluates to `UNRESOLVED` / `UNVERIFIED`, named explicitly
-  in `Reasons`, with `Supporting sources` left `N/A` — confirmed by test
-  and by manual inspection of the rendered `REVIEW.md`.
-- **Never silently changes a claim's classification.** `evidence.py`
-  never writes to `claim.classification`; `mutate.py`'s
-  `update_claim_field` structurally refuses (`PermissionError`) any field
-  outside `{Fact-check status, Evidence, Contradictory evidence,
-  Confidence level}` — `Classification` and `Exact claim` are not in that
-  set, so writing them is a programming error, not a runtime choice.
-  Correcting a claim only works via `supersede_claim`, which creates a new
-  file and leaves the old claim's table byte-identical.
-- **Never publishes, never touches Owner approval or `status`.**
-  `mutate.py`'s `CONTENT_ITEM_WRITABLE_FIELDS` whitelist is
-  `{Research state, Fact-check state}` only — `status` and `Owner approval
-  state` cannot be written through this codebase at all. No code path
-  contains the word "publish" in an executable sense.
-  `CONTENT_ITEM_WRITABLE_FIELDS`/`CLAIM_WRITABLE_FIELDS` are the same set
-  named in `CONTRACT.md`'s Allowed actions.
-- **Multi-pass rules enforced, not just documented.** `REJECT` blocks any
-  new attempt until `HUMAN_REOPEN: <ROLE>` appears in Notes/history log;
-  two consecutive `REVISION_REQUIRED` verdicts block a third automated
-  attempt (`can_run_new_attempt`); a stale `PASS` (content hash mismatch)
-  reads back as `REVISION_REQUIRED` (`effective_stage_state`).
-- **Never auto-`FALSE`, never clears a prior `FALSE`.** Contradicted
-  evidence resolves to `DISPUTED`; a claim already marked `FALSE` stays
-  `FALSE` regardless of what re-evaluation would otherwise compute.
-
-## Schema changes made this phase
-
-- `templates/REVIEW.md`: new `Reviewed content hash` field (see above).
-- `agents/researcher/CONTRACT.md`: new "Implementation notes (Phase 5)"
-  section (see above). No changes to `templates/CLAIM.md`,
-  `templates/CONTENT_ITEM.md`, `templates/RESEARCH.md`,
-  `templates/SCRIPT.md`, or `CONSTITUTION.md`.
+All scratch/tempdir verification used disposable copies — the real
+golden sample's only changes this phase are the intentional Step 0
+`c5`/`c12` correction (`git status --short content/` confirms nothing
+else was touched).
 
 ## Known limitations
 
-- FACT_CHECK mode only — RESEARCH mode (source collection/live retrieval)
-  is not implemented; `loader.load_research()` reads local files, and the
-  seam for a future live-retrieval implementation is documented but not
-  built (no crawler, per the task's explicit instruction).
-- No semantic/NLP comparison of claim text to source text — evaluation is
-  structural-signal only (source existence, reciprocal citation, source
-  reliability, presence of contradictory evidence, `Derived from` chain
-  integrity). Documented as a deliberate MVP boundary in
-  `agents/researcher/README.md`, not a bug.
-- `INFERENCE`/`SPECULATION` claims always resolve to `Fact-check status:
-  NOT_APPLICABLE`, even when their evidence support is computed as
-  `CONTRADICTED` — allowed by `CONTRACT.md` but a future version could be
-  more precise.
-- The two-consecutive-`REVISION_REQUIRED` cap counts verdicts, not
-  "same underlying issue" as `CONTRACT.md` phrases it — distinguishing
-  which issue would need comparing `Reasons` text across attempts.
-- Markdown table parser assumes no cell value contains a literal `|`
-  (true of every file in this repo today).
-- Running the MVP (dry run) against the real golden sample surfaced a
-  genuine, previously-unnoticed Atomicity rule violation in `claims/c5.md`
-  (two sentences) — left as-is deliberately; that is what
-  `REVISION_REQUIRED` is for, not something to patch mid-implementation.
-  The golden sample itself was **not** modified by this phase — it was
-  only read (dry run) and, separately, exercised via `--apply` against
-  disposable copies in tests. A real `--apply` run against the committed
-  golden sample (which would update its `Fact-check state` and its
-  Phase-3-era "stops before FACT_CHECK" status commentary) is left for a
-  deliberate follow-up, not a side effect of building the agent.
+Researcher: unchanged from Phase 5 (see `agents/researcher/README.md`).
+
+Safety Reviewer (see `agents/safety/README.md` for full detail):
+- Pattern/keyword detection only for 8 of 12 signals — not exhaustive,
+  will miss subtler real cases; `LOW_RISK` means "no known pattern
+  matched," not "confirmed safe."
+- `DEFAMATION` and `SENSITIVE_CONTENT` never resolve above
+  `REVIEW_REQUIRED` by design — always human judgment, never an automatic
+  clearance or automatic reject.
+- `TITLE_THUMBNAIL_MISREPRESENTATION` only inspects title text; no
+  thumbnail image exists yet at this pipeline stage.
+- No orchestrator exists to run RESEARCH→FACT_CHECK→SAFETY_REVIEW→...
+  automatically — each agent is invoked independently, by design, this
+  phase.
+- The Safety Reviewer has not been run with `--apply` against the real
+  golden sample (same deliberate deferral as the Researcher in Phase 5,
+  to avoid changing its Phase 3-era status commentary as a side effect of
+  building the agent).
 
 ## Next task
 
-**Phase 6 — Automated Review**, per the roadmap. Likely scope: run the
-Phase 5 agent for real (`--apply`) against the golden sample as its first
-production use, reconcile the resulting `Fact-check state`/Notes-log
-change with the sample's Phase 3/4 documentation ("stops before
-FACT_CHECK"), and design/implement the next reviewer role's contract
-(most plausibly `SAFETY_REVIEWER`, since `FACT_CHECK` -> `SAFETY_REVIEW`
-is the next pipeline handoff with no agent contract yet). Still bounded by
-`CONSTITUTION.md`: no automated publishing, no `status`/`Owner approval`
-authority for any agent, human sign-off remains required before any
-verdict this system produces reaches `APPROVED`.
+**Phase 6 continuation, per the roadmap:** build the Originality Reviewer
+(its own `agents/originality/CONTRACT.md` + MVP, following the same
+independent-agent, reused-infrastructure pattern as Safety), then the
+unified Automated Review Orchestrator that actually drives
+RESEARCH/FACT_CHECK → SAFETY_REVIEW → ORIGINALITY_REVIEW →
+EDITORIAL_REVIEW → PRODUCTION_QA in sequence using the shared interface
+`agents/README.md` now documents. Still no video production, no YouTube
+publishing, no learning engine. Every stage remains bounded by
+`CONSTITUTION.md`: no agent gets `status`/`Owner approval` authority, and
+no automated publishing exists at any point in this chain.
