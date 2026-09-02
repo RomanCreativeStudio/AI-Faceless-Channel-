@@ -5,16 +5,17 @@ Operational architecture for the AI Faceless Channel project. Governed by
 
 ## Current phase
 
-**MVP automated review layer.** Two independent agents have working,
+**MVP automated review layer.** Three independent agents have working,
 tested implementations, stdlib Python, no dependencies: the Research /
-Fact-Check Agent (`agents/researcher/src/`, FACT_CHECK mode only) and the
-Safety Reviewer (`agents/safety/src/`, SAFETY_REVIEW only). No
-orchestrator runs them in sequence yet — see `agents/README.md`'s shared
-interface convention. Everything else remains documentation/templates
-only: no RESEARCH-mode live retrieval, no originality/editorial/QA
-agents, no video generation, no automation/scheduling, no publishing, no
-external API integration. Nothing outside `agents/researcher/` and
-`agents/safety/` executes.
+Fact-Check Agent (`agents/researcher/src/`, FACT_CHECK mode only), the
+Safety Reviewer (`agents/safety/src/`, SAFETY_REVIEW only), and the
+Originality Reviewer (`agents/originality/src/`, ORIGINALITY_REVIEW
+only). No orchestrator runs them in sequence yet — see
+`agents/README.md`'s shared interface convention. Everything else remains
+documentation/templates only: no RESEARCH-mode live retrieval, no
+editorial/production-QA agents, no video generation, no automation/
+scheduling, no publishing, no external API integration. Nothing outside
+`agents/researcher/`, `agents/safety/`, and `agents/originality/` executes.
 
 ## Directory structure
 
@@ -37,10 +38,15 @@ external API integration. Nothing outside `agents/researcher/` and
 │   │   ├── README.md             How to run it, module map, limitations
 │   │   ├── src/                  MVP implementation (FACT_CHECK mode only)
 │   │   └── tests/                Unit + integration tests
-│   └── safety/                 Safety Reviewer
+│   ├── safety/                  Safety Reviewer
+│   │   ├── CONTRACT.md           Design contract
+│   │   ├── README.md             How to run it, module map, limitations
+│   │   ├── src/                  MVP implementation (SAFETY_REVIEW only)
+│   │   └── tests/                Unit + integration tests
+│   └── originality/            Originality Reviewer
 │       ├── CONTRACT.md           Design contract
 │       ├── README.md             How to run it, module map, limitations
-│       ├── src/                  MVP implementation (SAFETY_REVIEW only)
+│       ├── src/                  MVP implementation (ORIGINALITY_REVIEW only)
 │       └── tests/                Unit + integration tests
 └── content/                Content pillar folders (structure only, no code)
     ├── business-stories/
@@ -107,21 +113,30 @@ how a future orchestrator would run every stage in sequence.
   Has a working MVP (`agents/safety/src/`). Touches only `reviews/*.md`
   and one whitelisted `CONTENT_ITEM.md` field (`Safety state`); never
   writes to a `claims/*.md` file.
+- `agents/originality/CONTRACT.md` — Originality Reviewer
+  (ORIGINALITY_REVIEW stage): editorial originality and similarity
+  *risk* only — never a plagiarism/legal determination, never "100%
+  original." Has a working MVP (`agents/originality/src/`). Touches only
+  `reviews/*.md` and one whitelisted `CONTENT_ITEM.md` field
+  (`Originality state`); never writes to `claims/*.md` or `research/*.md`.
 
-Both agents: never run unless explicitly invoked (no scheduling, no
+All three agents: never run unless explicitly invoked (no scheduling, no
 triggers); `--apply` is opt-in, a dry run is the default; never touch
 `status` or `Owner approval state`; never publish anything.
 
 ## Out of scope for this phase
 
-- No dependency installation (both MVPs are stdlib Python only), no
+- No dependency installation (all three MVPs are stdlib Python only), no
   frameworks.
 - No automation or scheduling — agents only run when explicitly invoked
   by a human.
 - No RESEARCH-mode implementation (source collection/live retrieval) —
   FACT_CHECK mode only for the Research/Fact-Check Agent.
+- No internet-wide plagiarism/similarity search — the Originality
+  Reviewer only compares against explicitly supplied channel metadata
+  and reference material.
 - No orchestrator running the pipeline stages automatically in sequence
   — each agent is invoked independently.
-- No originality/editorial/production-QA agents yet, no video
-  generation, no external API integration (e.g. YouTube).
+- No editorial/production-QA agents yet, no video generation, no
+  external API integration (e.g. YouTube).
 - No production or publishing pipeline.
