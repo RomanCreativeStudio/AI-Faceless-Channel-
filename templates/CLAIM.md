@@ -36,6 +36,39 @@ statement in `templates/SCRIPT.md` should trace back to a claim here.
   `Fact-check status` is normally `NOT_APPLICABLE` unless the speculation
   itself later becomes checkable.
 
+## Atomicity rule
+
+Each `CLAIM.md` file must contain exactly one atomic claim with exactly
+one classification. This is the deterministic, mechanically-checkable
+test (no NLP required) for whether a claim needs to be split:
+
+1. **One sentence.** `Exact claim` is a single sentence (one terminal
+   period, abbreviations aside).
+2. **No causal/inferential connectors inside the sentence.** If
+   `Exact claim` contains " because ", " therefore ", " which means ",
+   " so that ", or a semicolon joining two independently-checkable
+   assertions, it is fusing a fact to a conclusion drawn from it — split
+   it into two claims and link them with `Derived from` instead of
+   writing the reasoning inline.
+3. **One classification fits without qualification.** If you cannot
+   assign `FACT`/`ASSUMPTION`/`INFERENCE`/`SPECULATION` without saying
+   "well, half of it is X and half is Y," the claim is compound and must
+   be split.
+
+Splitting is mandatory, not stylistic — a compound claim makes fact-check
+verdicts ambiguous (which half passed?) and is the kind of thing this
+rule exists to make impossible to miss, by hand today and by a linter
+later.
+
+Claims are **immutable once created**: correcting a claim's wording or
+classification is never an in-place edit. Create a new claim ID, set the
+old claim's `Fact-check status` note (in `Evidence` or a new trailing
+line) to point at the superseding claim ID, and record why in the content
+item's Notes/history log. This keeps the audit trail intact and is what
+makes rule "an agent may never silently change a claim's classification"
+(see `agents/researcher/CONTRACT.md`) enforceable: a classification
+change is always a new, visible claim, never a silent overwrite.
+
 `what-if` content items must classify every claim as one of the four
 KNOWN FACT / ASSUMPTION / INFERENCE / SPECULATION categories defined in
 `CONSTITUTION.md` rule 4 and `SYSTEM.md`; `FACT` here corresponds to

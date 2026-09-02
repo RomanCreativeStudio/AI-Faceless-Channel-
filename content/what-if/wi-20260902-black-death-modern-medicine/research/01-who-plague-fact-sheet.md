@@ -29,7 +29,8 @@
 
 ## Related claims
 
-`claims/c2.md`, `claims/c3.md`, `claims/c6.md`, `claims/c7.md`
+`claims/c2.md`, `claims/c3.md`, `claims/c6.md`, `claims/c7.md`,
+`claims/c10.md`
 
 ## Conflicting evidence
 

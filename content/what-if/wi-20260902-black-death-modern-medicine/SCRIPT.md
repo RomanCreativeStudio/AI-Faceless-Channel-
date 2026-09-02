@@ -36,7 +36,7 @@ still no antibiotics, vaccines, diagnostics, or hospitals?
 4. **What plausibly changes** — earlier identification and isolation of
    cases could reduce transmission chains; but anyone infected still
    faces historically-grounded fatality risk, because there is still no
-   cure. — claims: `c3`, `c6`
+   cure. — claims: `c3`, `c10`, `c11`, `c6`
 5. **Where the hypothetical hits its limits** — pneumonic (airborne)
    plague is harder to contain than bubonic even with quarantine
    knowledge, given medieval enforcement limits. — claims: `c7`
@@ -58,9 +58,13 @@ still no antibiotics, vaccines, diagnostics, or hospitals?
 | `c7` | `INFERENCE` | `NOT_APPLICABLE` | 5 |
 | `c8` | `SPECULATION` | `NOT_APPLICABLE` | 6 |
 | `c9` | `SPECULATION` | `NOT_APPLICABLE` | 6 |
+| `c10` | `FACT` | `UNVERIFIED` | 4 |
+| `c11` | `FACT` | `UNVERIFIED` | 4 |
 
-All nine claims are `UNVERIFIED`/`NOT_APPLICABLE` because this item has not
-reached `FACT_CHECK` status — see `CONTENT_ITEM.md`.
+All eleven claims are `UNVERIFIED`/`NOT_APPLICABLE` because this item has
+not reached `FACT_CHECK` status — see `CONTENT_ITEM.md`. (`c10`/`c11`
+were split from the original `c3` during the Phase 4 consistency check,
+per `templates/CLAIM.md`'s Atomicity rule — see `c3.md`'s revision note.)
 
 ## Transitions
 
@@ -109,8 +113,9 @@ and must be delivered with explicit hedging language ("it's hard to say,"
 
 - **KNOWN FACT** — The Black Death's actual timeline and mortality (`c1`);
   the total absence of germ theory in the 14th century and its later
-  development in the 1860s–1880s (`c2`); modern plague treatment and
-  untreated fatality rates (`c3`).
+  development in the 1860s–1880s (`c2`); untreated plague fatality rates
+  (`c3`); modern antibiotic treatment efficacy (`c10`); antibiotics not
+  existing until the 20th century (`c11`).
 - **ASSUMPTION** — This scenario grants germ theory, case tracking,
   sanitation, and quarantine capability (`c4`); it withholds antibiotics,
   vaccines, diagnostics, pharmaceutical manufacturing, and hospitals

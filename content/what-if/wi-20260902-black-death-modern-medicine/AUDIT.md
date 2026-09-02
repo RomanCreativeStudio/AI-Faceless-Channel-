@@ -122,3 +122,25 @@ once the three ambiguities above are fixed. It was not merely exercised —
 five separate breakage points were found (three fixed as template
 ambiguities, one fixed as a template gap, one deferred as low-risk at
 current scale) rather than zero.
+
+## Phase 4 addendum
+
+Both soft risks deferred above were resolved in Phase 4 as the two
+deferred-schema-question objectives:
+
+- **Claim atomicity** — `templates/CLAIM.md` now has a deterministic
+  Atomicity rule (one sentence, no causal connectors, one classification).
+  Re-running this sample against it found `c3` was itself a compound
+  claim (see `claims/c3.md`'s revision note) — split into `c3`/`c10`/`c11`.
+  This is direct evidence the rule catches real, not just hypothetical,
+  violations.
+- **Multi-pass review resolution** — `templates/REVIEW.md` now has a
+  Multi-pass resolution rule (sequential numbering, latest-attempt-wins,
+  `REJECT` terminal without human reopening, `PASS` scoped/staleness on
+  artifact change). Not exercised by this sample (no `REVIEW.md` created
+  yet — it stops before `FACT_CHECK`), but consistent with everything
+  else in this item.
+
+See `agents/researcher/CONTRACT.md` for the first agent contract, which
+this sample's structure (research → claims → script → pending fact-check)
+was designed to exercise once that agent exists.

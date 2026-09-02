@@ -5,9 +5,9 @@ Operational architecture for the AI Faceless Channel project. Governed by
 
 ## Current phase
 
-**Content intelligence architecture.** Documentation and templates only.
-No implementation code, no scripts, no automation, no dependencies, no
-external API integration. Nothing here executes.
+**Agent contracts.** Documentation, templates, and agent specifications
+only. No implementation code, no scripts, no automation, no dependencies,
+no external API integration. Nothing here executes.
 
 ## Directory structure
 
@@ -24,6 +24,8 @@ external API integration. Nothing here executes.
 │   ├── SCRIPT.md
 │   ├── REVIEW.md
 │   └── VIDEO_QA.md
+├── agents/                  Agent contracts (spec only, no code)
+│   └── researcher/            Research / Fact-Check Agent contract
 └── content/                Content pillar folders (structure only, no code)
     ├── business-stories/
     ├── history/
@@ -72,9 +74,19 @@ REJECTED (may occur from any stage)
 approval) and precedes `PUBLISHED`. No stage is automated yet, and
 publishing will never be automated per `CONSTITUTION.md` rule 2.
 
+## Agent contracts
+
+`agents/` holds specifications for future agents — what each is allowed
+and forbidden to do, and its exact handoff back into the pipeline. A
+contract is a design document, not code; an agent may only be implemented
+once its contract exists and has been reviewed. See `agents/README.md`.
+The first contract, `agents/researcher/CONTRACT.md`, covers the Research /
+Fact-Check Agent (RESEARCH and FACT_CHECK stages only).
+
 ## Out of scope for this phase
 
 - No scripts, no dependency installation, no code of any kind.
 - No automation or scheduling.
-- No agents, no video generation, no external API integration (e.g. YouTube).
+- No agent *implementations* (contracts only), no video generation, no
+  external API integration (e.g. YouTube).
 - No production or publishing pipeline.

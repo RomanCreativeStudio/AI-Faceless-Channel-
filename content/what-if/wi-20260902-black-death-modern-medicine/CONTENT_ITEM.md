@@ -45,7 +45,7 @@ deliberately stops before `FACT_CHECK`.
 ## Linked records
 
 - Research: `research/01-who-plague-fact-sheet.md`, `research/02-oxford-black-death-history.md`, `research/03-britannica-germ-theory.md`
-- Claims: `claims/c1.md` – `claims/c9.md`
+- Claims: `claims/c1.md` – `claims/c9.md`, `claims/c10.md`, `claims/c11.md`
 - Script: `SCRIPT.md`
 - Reviews: none yet (status has not reached `FACT_CHECK`)
 - Video QA: none yet (no production)
@@ -63,3 +63,11 @@ above and `claims/c8.md`, `claims/c9.md` for the modeled uncertainty.
   `templates/` against a realistic `what-if` item before any agent or
   automation work. Three template gaps found and fixed during drafting —
   see `AUDIT.md`.
+- 2026-09-02 — Phase 4 consistency check applied the new Atomicity rule
+  (`templates/CLAIM.md`) retroactively and found `c3` was a compound
+  claim (semicolon + second sentence joining three separate assertions).
+  Split into `c3` (untreated fatality), `c10` (antibiotic efficacy), and
+  `c11` (20th-century antibiotic development). `SCRIPT.md` and
+  `research/01-who-plague-fact-sheet.md` updated accordingly. No
+  `REVIEW.md` existed yet referencing the old `c3` text, so this was a
+  direct fix rather than a superseded-claim record.

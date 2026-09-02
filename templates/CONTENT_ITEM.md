@@ -49,7 +49,11 @@ gates are one-shot.
 
 Each stage tracks its own state independently of the overall `status`, so
 an item's history stays visible even after `status` has moved on. Allowed
-values per state family (see `templates/REVIEW.md` for reviewer detail):
+values per state family (see `templates/REVIEW.md` for reviewer detail).
+When a gate state is backed by multiple review attempts (e.g. a
+fact-checker retry), `templates/REVIEW.md`'s "Multi-pass resolution"
+section is the authoritative rule for which attempt's verdict the gate
+state reflects — always the latest, never an average.
 
 - **Approval / gate states** (owner approval, fact-check, safety,
   originality, QA): `NOT_STARTED` \| `IN_PROGRESS` \| `PASS` \|

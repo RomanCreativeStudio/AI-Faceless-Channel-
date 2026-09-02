@@ -4,85 +4,108 @@ Last updated: 2026-09-02
 
 ## Phase
 
-**Phase 3 — Golden Sample Validation.** Complete.
+**Phase 3 — Golden Sample Validation: complete, approved.**
+**Phase 4 — Agent Contracts: in progress (documentation/spec complete,
+pending human sign-off before any implementation).**
 
 Phase 1 (foundational docs/structure) and Phase 2 (content-item schema) —
 complete, approved.
 
-## Completed (Phase 3)
+## Completed (Phase 4)
 
-- `content/what-if/wi-20260902-black-death-modern-medicine/` — golden
-  sample content item ("What If Modern Medicine Existed During the Black
-  Death?"), taken through `IDEA → RESEARCH → SCRIPT`:
-  - `CONTENT_ITEM.md` — master record, status `SCRIPT`
-  - `research/01-who-plague-fact-sheet.md`, `02-oxford-black-death-history.md`,
-    `03-britannica-germ-theory.md` — 3 real, verified sources (WHO,
-    University of Oxford Faculty of History, Encyclopaedia Britannica); no
-    invented sources or URLs
-  - `claims/c1.md`–`c9.md` — 9 claims: 3 `FACT`, 2 `ASSUMPTION`, 2
-    `INFERENCE`, 2 `SPECULATION`
-  - `SCRIPT.md` — hook through conclusion, with a `Verified claims`
-    roll-up and explicit KNOWN FACT / ASSUMPTION / INFERENCE / SPECULATION
-    separation
-  - `AUDIT.md` — the schema-validation report (see Schema findings below)
-- `content/what-if/README.md` — one-line pointer to the golden sample
-- `templates/CLAIM.md` — fixed: added `Derived from` field; clarified
-  `Supporting sources` applies fully only to `FACT`; added
-  `NOT_APPLICABLE` to `Fact-check status`; added `N/A` to `Confidence
-  level` for `ASSUMPTION`
-- `templates/SCRIPT.md` — fixed: added a `Verified claims` roll-up table
-- `templates/CONTENT_ITEM.md` — fixed: added the pillar→ID-prefix mapping
-  (`bs`/`hist`/`tech`/`wi`); clarified that `REVISION_REQUIRED` at a gate
-  moves `status` back to the preceding work stage
-- `STATE.md` — this file
+**Schema decisions (the two deferred questions from Phase 3's AUDIT.md):**
+- `templates/CLAIM.md` — added the **Atomicity rule**: a claim's `Exact
+  claim` must be one sentence, free of causal/inferential connectors
+  ("because", "therefore", "which means", "so that", semicolon-joined
+  assertions), and assignable exactly one classification. Claims are also
+  now explicitly immutable once created — corrections supersede via a new
+  claim ID, never an in-place edit, which is what makes "an agent can
+  never silently change a claim's classification" actually enforceable.
+- `templates/REVIEW.md` — added the **Multi-pass resolution rule**:
+  review attempts are numbered sequentially per role and never
+  overwritten; a role's stage state always equals the latest attempt's
+  verdict; `REJECT` is terminal until a human logs a reopen decision;
+  `PASS` is scoped to the exact artifacts reviewed and goes stale (and
+  must be logged as such) if they change afterward; `REVISION_REQUIRED`
+  is the only verdict an agent may act on autonomously, and two
+  consecutive ones on the same issue escalates to a human rather than a
+  third attempt.
+- `templates/CONTENT_ITEM.md` — cross-referenced both rules from the
+  Stage states section.
 
-## Schema findings (from actively trying to break it — see AUDIT.md for full detail)
+**Agent contract:**
+- `agents/README.md` — index; states every agent contract is subordinate
+  to `CONSTITUTION.md`.
+- `agents/researcher/CONTRACT.md` — full contract for the **Research /
+  Fact-Check Agent** (first agent in the roadmap), covering purpose,
+  inputs/outputs, allowed/forbidden actions, source standards, claim
+  handling, fact-check status transitions, confidence handling,
+  contradiction reporting, missing-evidence handling, uncertainty
+  recording, failure conditions, human escalation conditions, and exact
+  pipeline handoff. Specification only — no implementation.
 
-Fixed (5): `CLAIM.md`'s `Supporting sources`/`Fact-check status`/
-`Confidence level` didn't accommodate non-`FACT` claims; `SCRIPT.md` had
-no consolidated claim list for fact-checkers; `CONTENT_ITEM.md` didn't
-define ID prefixes for 3 of 4 pillars or how failed gate reviews loop
-back. All fixed in the templates above and re-validated against the
-sample.
+**Consistency-check fix to the Phase 3 golden sample:**
+- Applying the new Atomicity rule to the existing sample found `c3` was
+  itself a compound claim (semicolon + second sentence, three fused
+  assertions). Split into `c3` (untreated fatality), `c10` (antibiotic
+  efficacy), `c11` (20th-century antibiotic development — flagged with
+  `Confidence level: MEDIUM` and `Supporting sources: N/A` since it isn't
+  backed by this item's three research entries, rather than inventing a
+  citation). Updated `SCRIPT.md`, `research/01-who-plague-fact-sheet.md`,
+  `CONTENT_ITEM.md`'s Notes/history log, and `AUDIT.md` (Phase 4
+  addendum) accordingly.
 
-Deferred, not fixed (2, both low-risk at current scale, both naturally
-resolved once agents/tooling exist): no enforcement that a claim is
-atomic (single classification) — currently author discipline; no defined
-rule for how repeated `REVIEW.md` passes of the same reviewer role
-resolve into one `CONTENT_ITEM.md` stage state.
+**Documentation updates:**
+- `SYSTEM.md` — directory structure now includes `agents/`; added an
+  "Agent contracts" section; "Current phase" updated; "out of scope"
+  clarified to "no agent *implementations*" (contracts now exist).
+- `STATE.md` — this file.
 
-## Verified
+## Verified (Phase 4 consistency checks)
 
-- Directory/file structure matches `SYSTEM.md`.
-- All 9 sample claims trace to real evidence: `FACT` claims cite
-  `research/*.md`; `INFERENCE`/`SPECULATION` cite parent claim IDs via
-  `Derived from`.
-- All four claim classifications (FACT/ASSUMPTION/INFERENCE/SPECULATION)
-  demonstrated with 2+ examples each.
-- Sample does not claim modern medicine would have prevented the Black
-  Death — `claims/c8.md`/`c9.md` and the script's beat 6 exist
-  specifically to preserve that uncertainty.
-- "Modern medicine" is decomposed into named, granted-vs-withheld
-  elements (`claims/c4.md`, `c5.md`), not treated as one technology.
-- All pipeline statuses from the spec still appear identically in both
-  `templates/CONTENT_ITEM.md` and `SYSTEM.md` (diffed, no drift).
-- No contradictions with `CONSTITUTION.md`: no automated publishing
-  claims introduced; human-only approval language unchanged.
-- All 3 external URLs in the sample were fetched and verified live during
-  this phase, not invented.
+- No `Exact claim` field across all 11 sample claims trips the Atomicity
+  rule's connector-word/semicolon test.
+- Every claim ID cited in `SCRIPT.md`, research entries, or
+  `CONTENT_ITEM.md` resolves to a real `claims/*.md` file (c1–c11).
+- Pipeline status string is character-identical between `SYSTEM.md` and
+  `templates/CONTENT_ITEM.md`.
+- `agents/researcher/CONTRACT.md` never claims publishing authority,
+  never permits touching `Owner approval state`, and never permits
+  changing top-level `status` — consistent with `CONSTITUTION.md` rules 1
+  and 2.
+- No new URLs were introduced this phase beyond the three already
+  verified in Phase 3 (WHO, Oxford, Britannica) — no invented sources.
+- What If? fact/assumption/inference/speculation boundary is unchanged
+  and still holds in the (now 11-claim) sample.
 
 ## Explicitly not done (by design, this phase)
 
-- Sample does not proceed into `FACT_CHECK`/production/publishing/analytics
-- No agents, automation, or external API integration
-- No `REVIEW.md`/`VIDEO_QA.md` instances created (reasoned through in
-  `AUDIT.md` instead, since this sample doesn't reach those stages)
+- No agent code, dependencies, or automation
+- No implementation of the Research / Fact-Check Agent
+- No additional agent contracts (script, safety, originality, production,
+  QA) — only the first agent in the roadmap was specified
+
+## Remaining human sign-off required before agent implementation
+
+1. Approve the two schema rules (Atomicity, Multi-pass resolution) as
+   binding — they are currently applied but not yet formally approved.
+2. Approve `agents/researcher/CONTRACT.md` as the authoritative contract
+   an implementation must satisfy — in particular the boundary that the
+   agent may update only `Research state`/`Fact-check state` and never
+   the top-level `status` field, and the escalation thresholds (REJECT
+   terminal, two-consecutive-REVISION_REQUIRED cap).
+3. Confirm the `c11` sourcing gap (antibiotic-history claim with no
+   dedicated citation) is acceptable to carry forward as `MEDIUM`
+   confidence, or should be backed by a proper source before this sample
+   is ever fact-checked.
 
 ## Next task
 
-Two deferred schema findings (claim atomicity, multi-pass review
-resolution) should be resolved as part of designing the first agent
-(likely a research/fact-check agent), since both are workflow-semantics
-questions that only need answers once something automated consumes these
-files. Requires human owner review of `AUDIT.md` and sign-off before any
-agent implementation begins — still no code this phase.
+Implement (still no running code — this remains a design step) the
+detailed behavioral spec / prompt design for the Research / Fact-Check
+Agent based on `agents/researcher/CONTRACT.md`, OR — pending the human
+owner's preference — begin drafting the next agent's contract (most
+likely a Script Agent, since RESEARCH → SCRIPT is the next handoff this
+roadmap hasn't specified yet). Actual code implementation of any agent
+requires explicit human sign-off per `CONSTITUTION.md` rule 6 (staged
+progress) and the sign-off items above.
