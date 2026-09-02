@@ -5,9 +5,12 @@ Operational architecture for the AI Faceless Channel project. Governed by
 
 ## Current phase
 
-**Agent contracts.** Documentation, templates, and agent specifications
-only. No implementation code, no scripts, no automation, no dependencies,
-no external API integration. Nothing here executes.
+**MVP Research / Fact-Check pipeline.** The first agent — FACT_CHECK mode
+only — has a working, tested implementation (`agents/researcher/src/`,
+stdlib Python, no dependencies). Everything else remains
+documentation/templates only: no RESEARCH-mode live retrieval, no other
+agents, no video generation, no automation/scheduling, no publishing, no
+external API integration. Nothing outside `agents/researcher/` executes.
 
 ## Directory structure
 
@@ -24,8 +27,12 @@ no external API integration. Nothing here executes.
 │   ├── SCRIPT.md
 │   ├── REVIEW.md
 │   └── VIDEO_QA.md
-├── agents/                  Agent contracts (spec only, no code)
-│   └── researcher/            Research / Fact-Check Agent contract
+├── agents/                  Agent contracts + implementations
+│   └── researcher/            Research / Fact-Check Agent
+│       ├── CONTRACT.md          Design contract
+│       ├── README.md            How to run it, module map, limitations
+│       ├── src/                 MVP implementation (FACT_CHECK mode only)
+│       └── tests/               Unit + integration tests
 └── content/                Content pillar folders (structure only, no code)
     ├── business-stories/
     ├── history/
@@ -77,16 +84,25 @@ publishing will never be automated per `CONSTITUTION.md` rule 2.
 ## Agent contracts
 
 `agents/` holds specifications for future agents — what each is allowed
-and forbidden to do, and its exact handoff back into the pipeline. A
-contract is a design document, not code; an agent may only be implemented
-once its contract exists and has been reviewed. See `agents/README.md`.
-The first contract, `agents/researcher/CONTRACT.md`, covers the Research /
-Fact-Check Agent (RESEARCH and FACT_CHECK stages only).
+and forbidden to do, and its exact handoff back into the pipeline. An
+agent may only be implemented once its contract exists and has been
+reviewed. See `agents/README.md`. The first contract,
+`agents/researcher/CONTRACT.md`, covers the Research / Fact-Check Agent
+(RESEARCH and FACT_CHECK stages). Its FACT_CHECK half now has a working
+MVP implementation (`agents/researcher/src/`) — see that directory's
+README for how to run it. It only ever touches `reviews/*.md` and two
+whitelisted `CONTENT_ITEM.md` fields; it never runs unless explicitly
+invoked (no scheduling, no triggers), and `--apply` is opt-in — a dry run
+is the default.
 
 ## Out of scope for this phase
 
-- No scripts, no dependency installation, no code of any kind.
-- No automation or scheduling.
-- No agent *implementations* (contracts only), no video generation, no
-  external API integration (e.g. YouTube).
+- No dependency installation (the MVP is stdlib Python only), no
+  frameworks.
+- No automation or scheduling — the agent only runs when explicitly
+  invoked by a human.
+- No RESEARCH-mode implementation (source collection/live retrieval) —
+  FACT_CHECK mode only.
+- No other agents (script, safety, originality, production, QA), no video
+  generation, no external API integration (e.g. YouTube).
 - No production or publishing pipeline.

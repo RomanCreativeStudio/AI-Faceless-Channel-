@@ -248,6 +248,52 @@ failure), it logs the failure in Notes/history log and produces no
   documents required changes and stops; a human or the agent (bounded by
   the two-consecutive-attempts escalation rule) may act on them next.
 
+## Implementation notes (Phase 5)
+
+The Phase 5 MVP (`agents/researcher/src/`) implements this contract. Two
+design decisions made during implementation, recorded here rather than
+left implicit:
+
+- **Evidence support is separate from `Fact-check status`, but computed —
+  not a new persisted `CLAIM.md` field.** Research collection (does a
+  source exist?) is a different question from fact-check evaluation (does
+  it actually support this exact claim?). The implementation models this
+  internally as `SUPPORTED` / `PARTIALLY_SUPPORTED` / `UNSUPPORTED` /
+  `CONTRADICTED` / `UNRESOLVED`, derived deterministically per claim from:
+  whether cited `research/*.md`/`claims/*.md` files exist, whether a cited
+  research entry's own `Related claims` field reciprocally names the
+  claim (an unconfirmed one-directional citation is not enough to
+  `SUPPORT`), source `Source reliability`, and whether `Contradictory
+  evidence` is populated. This is compatible with the existing templates
+  without a schema change — it's surfaced in the `REVIEW.md` `Reasons`
+  list and the structured JSON result, not written back onto `CLAIM.md`.
+  `Fact-check status` is then derived from evidence support plus
+  `Confidence level` per the Fact-check statuses/Confidence handling
+  sections above — evidence support is the "why," `Fact-check status` is
+  the field this contract already governs.
+- **`Reviewed content hash`** (`templates/REVIEW.md`, added Phase 5) is
+  populated by this agent on every `REVIEW.md` it writes, making Multi-pass
+  resolution rule 4 (`PASS` staleness) mechanically checkable instead of a
+  manual obligation. See `agents/researcher/src/hashing.py`.
+
+Verdict derivation used by the implementation (all deterministic, no
+claim ever guessed as `FALSE` — that requires stronger judgment than this
+MVP applies automatically, so `CONTRADICTED` evidence maps to `DISPUTED`,
+never auto-`FALSE`):
+
+1. Structural failure (a `SCRIPT.md`-cited claim ID has no file, or a
+   claim's `Classification` is missing/invalid) → `REJECT`.
+2. No research/claims loadable at all → abort, no `REVIEW.md` written.
+3. More than half of reviewed claims come back `DISPUTED`, or any claim
+   involves a `CONTRADICTED` conflict between two `HIGH`-reliability
+   sources → `REVISION_REQUIRED`, flagged for human escalation.
+4. Any claim's evidence support is `CONTRADICTED` → that claim's
+   `Fact-check status` is `DISPUTED` → verdict at least `REVISION_REQUIRED`.
+5. Any `FACT` claim not `VERIFIED` (still `UNVERIFIED`, including
+   `UNRESOLVED` evidence support — this is the `c11` case) →
+   `REVISION_REQUIRED`, gap named explicitly, no citation fabricated.
+6. Otherwise → `PASS`.
+
 ## What the agent is explicitly NOT allowed to do (summary)
 
 - Invent sources, URLs, quotes, statistics, or evidence

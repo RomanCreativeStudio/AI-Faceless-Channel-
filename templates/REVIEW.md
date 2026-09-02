@@ -11,6 +11,7 @@ item accumulates one of these per review, per reviewer role, per attempt.
 | Reviewer | `<name/handle, or "AI-assisted: <agent>" pending human confirmation>` |
 | Review date | `<YYYY-MM-DD>` |
 | Verdict | `PASS` \| `REVISION_REQUIRED` \| `REJECT` |
+| Reviewed content hash | `<sha256 of the exact reviewed artifacts>` \| `N/A` (human reviews may leave this `N/A`; automated reviewers must populate it — see Multi-pass resolution rule 4) |
 
 ## Reasons
 
@@ -49,9 +50,14 @@ that resolves into `CONTENT_ITEM.md`'s single stage state for that role:
    any `CLAIM.md` file cited by this review changes afterward, the `PASS`
    is stale immediately — the stage state reverts to `REVISION_REQUIRED`
    and this must be logged in Notes/history log by whoever made the
-   change. (Mechanically detecting "changed since" needs content hashing,
-   which is deferred to agent implementation; until then this is a
-   process obligation on whoever edits reviewed artifacts.)
+   change. Mechanical detection: `Reviewed content hash` (added Phase 5)
+   is the sha256 of the concatenation of `SCRIPT.md`'s content and every
+   cited `claims/*.md` file's content, sorted by claim ID for a stable
+   order. Recomputing it and comparing against the value stored on the
+   latest attempt for a role is how staleness is detected without manual
+   tracking — see `agents/researcher/src/hashing.py` for the reference
+   implementation. A human review may still leave this `N/A`; in that
+   case staleness reverts to the manual process obligation above.
 5. **`REVISION_REQUIRED` is the only verdict an agent may act on
    autonomously** (fix and create the next attempt) without additional
    human authorization, since it's the expected, bounded retry loop. Two
