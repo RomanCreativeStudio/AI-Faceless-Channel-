@@ -1,8 +1,8 @@
 # Agents
 
-Contracts (and, for three agents so far, MVP implementations) for the
-automated review pipeline — what each is allowed and forbidden to do, and
-how it hands off to the next stage.
+Contracts and MVP implementations for the automated review pipeline —
+what each is allowed and forbidden to do, and how it hands off to the
+next stage.
 
 Every agent contract here is subordinate to `CONSTITUTION.md`. Where
 anything in an agent contract could be read as conflicting with
@@ -23,12 +23,19 @@ override it. No agent has publishing authority, ever, at any stage.
   `ORIGINALITY_REVIEW` — never a plagiarism/legal determination, never
   "100% original." Has a working MVP (`originality/src/`,
   `originality/README.md`).
+- [`orchestrator/`](./orchestrator/) — Unified Automated Review
+  Orchestrator: runs the three agents above in order and aggregates
+  their results. Makes **no** review judgment of its own — see
+  `orchestrator/CONTRACT.md`'s "Important distinction." Has a working
+  MVP (`orchestrator/src/`, `orchestrator/README.md`).
 
 ## Not yet specified
 
-Script drafting, editorial review, production QA, and publication remain
-fully human-driven until a contract is written and approved here — see
-`STATE.md` for what's next.
+Script drafting, editorial review, and production QA remain fully
+human-driven until a contract is written and approved here (the
+orchestrator's pipeline stops before them — see below). Publication
+remains human-gated permanently, by `CONSTITUTION.md` rule 2, regardless
+of what gets automated upstream of it — see `STATE.md` for what's next.
 
 ## The pipeline sequence, and the shared interface shape
 
@@ -37,12 +44,21 @@ RESEARCH / FACT_CHECK → SAFETY_REVIEW → ORIGINALITY_REVIEW →
 EDITORIAL_REVIEW → PRODUCTION_QA
 ```
 
-No orchestrator exists yet that runs this sequence automatically — each
-agent is invoked independently today (its own CLI, its own tests). This
-is deliberate: `researcher/`, `safety/`, and `originality/` are each
-fully usable on their own, with no dependency on the others having run.
-When an orchestrator is eventually built, it can drive this sequence
-because every stage's entry point already shares one result shape:
+`agents/orchestrator/` now runs the first three stages
+(`FACT_CHECK → SAFETY_REVIEW → ORIGINALITY_REVIEW`) in order, stopping at
+the first stage that doesn't cleanly `PASS` — see
+`orchestrator/CONTRACT.md`. `EDITORIAL_REVIEW` and `PRODUCTION_QA` have
+no agent yet, so the orchestrator's pipeline currently ends at
+`ORIGINALITY_REVIEW`; a clean run reaches `AUTOMATED_REVIEW_COMPLETE`,
+which hands off to the still fully human-driven `HUMAN_REVIEW` stage (the
+orchestrator never touches `status`, so nothing actually advances
+automatically).
+
+Each of the four agents remains independently usable — the orchestrator
+existing doesn't create any new dependency between `researcher/`,
+`safety/`, and `originality/`, and each still has its own CLI and test
+suite. This works because every review-stage entry point shares one
+result shape:
 
 | Field | Meaning |
 |---|---|
@@ -55,15 +71,17 @@ because every stage's entry point already shares one result shape:
 | `blocked` / `blocked_reason` | Multi-pass gating refused a new attempt (REJECT-terminal or two-consecutive-`REVISION_REQUIRED`) |
 | `review_path` | Where the `REVIEW.md` was written, if `apply=True` and not blocked |
 
-All three agents' entry points — `agents.researcher.src.pipeline
+All three review agents' entry points — `agents.researcher.src.pipeline
 .run_fact_check(root, apply)`, `agents.safety.src.pipeline
 .run_safety_review(root, apply)`, and `agents.originality.src.pipeline
 .run_originality_review(root, apply, ...)` — return a dataclass with this
 shape and share the same `dry-run by default, --apply is opt-in`
-behavior. A future orchestrator can call each stage's entry point in
-sequence, stopping (and surfacing `escalate_to_human`) whenever a stage
-doesn't return `PASS`, without needing to know anything about that
-stage's internals.
+behavior. `agents.orchestrator.src.pipeline.run_automated_review(root,
+apply, ...)` calls each of those directly, in order, and aggregates their
+results into one `OrchestratorResult` (same core fields, plus
+`stages_executed`/`stages_skipped`/`first_blocking_stage` — see
+`orchestrator/CONTRACT.md`'s Result model) — it doesn't need to know
+anything about any stage's internals to do this.
 
 ## Shared vs. independent code
 
@@ -75,7 +93,11 @@ exception types) — never `researcher/`'s fact-check domain logic
 (`evidence.py`, `factcheck.py`, `atomicity.py`, or its own field
 whitelist/hashing). `safety/` and `originality/` do **not** import from
 each other — they are siblings, each depending only on `researcher/`'s
-generic base. Each agent has its own `mutate.py` with its own hard-coded
-field whitelist, its own `hashing.py`, and its own signal/evidence
-evaluation. No agent requires either of the other two to run first or to
-exist at all.
+generic base. Each review agent has its own `mutate.py` with its own
+hard-coded field whitelist, its own `hashing.py`, and its own
+signal/evidence evaluation. `orchestrator/` imports each of the three
+agents' real `run_*` pipeline functions directly (never reimplementing
+their logic) plus the same generic pieces from `researcher/src`; it has
+**no `mutate.py` of its own** — every write under `--apply` happens
+inside the invoked agent's own existing path. No agent requires any other
+to run first or to exist at all.
