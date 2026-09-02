@@ -24,6 +24,15 @@ cite a claim ID from `templates/CLAIM.md`.
 1. `<beat>` — claims: `<claim IDs>`
 2. `<beat>` — claims: `<claim IDs>`
 
+## Verified claims
+
+Consolidated roll-up of every claim ID cited above, so a fact checker
+(`templates/REVIEW.md`) doesn't have to extract them by hand from prose.
+
+| Claim ID | Classification | Fact-check status | Beat(s) |
+|---|---|---|---|
+| `<claim ID>` | `FACT`\|`ASSUMPTION`\|`INFERENCE`\|`SPECULATION` | `<from CLAIM.md>` | `<beat #s>` |
+
 ## Transitions
 
 `<how beats connect; on-screen/verbal transition lines>`

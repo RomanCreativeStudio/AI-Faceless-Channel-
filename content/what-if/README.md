@@ -7,4 +7,6 @@ from hypothetical inference — e.g. explicit "Known" vs. "Hypothetical"
 sections or labels. Speculation must never be presented as verified fact
 (`CONSTITUTION.md` rule 4).
 
-No episode content yet — structure only, per `STATE.md`.
+One golden sample exists: `wi-20260902-black-death-modern-medicine/` — a
+schema-validation exercise (see its `AUDIT.md`), not a finished video. No
+other episode content yet — structure only, per `STATE.md`.

@@ -12,6 +12,7 @@ these fields instead of passing arbitrary text to each other.
 | Field | Value |
 |---|---|
 | Content ID | `<pillar-prefix>-<YYYYMMDD>-<slug>` e.g. `hist-20260902-rome-fire` |
+| ↳ pillar prefixes | `business-stories`→`bs` · `history`→`hist` · `technology`→`tech` · `what-if`→`wi` |
 | Working title | `<draft title>` |
 | Final title | `<set at APPROVED>` |
 | Content pillar | `business-stories` \| `history` \| `technology` \| `what-if` |
@@ -36,6 +37,13 @@ REJECTED (may occur from any stage)
 ```
 
 Current status: `IDEA`
+
+A `REVISION_REQUIRED` verdict at any gate stage (fact-check, safety,
+originality, QA, human review) moves `status` back to the nearest
+preceding work stage (e.g. a failed `FACT_CHECK` moves `status` back to
+`SCRIPT`) for rework, and the item re-enters the pipeline forward from
+there. The diagram above shows the forward path only; it does not imply
+gates are one-shot.
 
 ## Stage states
 
