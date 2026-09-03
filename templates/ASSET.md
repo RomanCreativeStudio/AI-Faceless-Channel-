@@ -17,15 +17,16 @@ or `Licensing/provenance status` as cleared just to unblock a scene.
 | Content ID | `<matches CONTENT_ITEM.md>` |
 | Asset type | `<IMAGE \| VIDEO_CLIP \| AUDIO \| MUSIC \| GRAPHIC>` |
 | Intended scene | `<scenes/scene-<n>.md path(s) that use this asset>` |
+| Scene/visual content hash | `<sha256 of the scene's narration + claim references + visual type/description at generation time — same staleness-detection pattern as templates/PRODUCTION.md/REVIEW.md/VOICE.md; added Phase 7C-2, see agents/assets/CONTRACT.md's "Schema changes" note. "N/A" until an asset agent has actually run>` |
 
 ## Provenance
 
 | Field | Value |
 |---|---|
-| Generated vs. retrieved | `GENERATED` \| `RETRIEVED` |
-| Source | `<where this came from: archive name, stock library, generation tool — "TBD" if not yet sourced>` |
+| Generated vs. retrieved | `GENERATED` \| `RETRIEVED` \| `HUMAN_PROVIDED` — the third value added Phase 7C-2 for a human-supplied asset; see agents/assets/CONTRACT.md |
+| Source | `<where this came from: archive name, stock library, generation tool, or the human provider's own description — "TBD" if not yet sourced. Never a fabricated URL or invented organization name.>` |
 | Source URL / reference | `<url, archive ID, or "N/A">` |
-| Generation prompt/reference | `<the exact prompt/parameters used, if GENERATED — "N/A" if RETRIEVED>` |
+| Generation prompt/reference | `<the exact prompt/parameters used, if GENERATED — "N/A" if RETRIEVED or HUMAN_PROVIDED>` |
 
 ## Historical authenticity classification
 
@@ -64,8 +65,26 @@ diagrams, music). No default — pick explicitly:
 | Dimensions / aspect ratio | `<e.g. 1920x1080, 16:9 — "N/A" for audio> ` |
 | File reference | `<path once generated/retrieved — "not yet produced" until then>` |
 
+## Generation/retrieval status
+
+Added Phase 7C-2 (`agents/assets/CONTRACT.md`) — mirrors
+`templates/SCENE.md`'s field of the same name, extended with
+`HUMAN_PROVIDED`:
+
+`NOT_STARTED` \| `IN_PROGRESS` \| `GENERATED` \| `RETRIEVED` \|
+`HUMAN_PROVIDED` \| `REVISION_REQUIRED`
+
+**`RETRIEVED` may only be used once a real retrieval has actually
+happened** — a placeholder/not-yet-implemented retrieval strategy stays
+`NOT_STARTED`, never `RETRIEVED`, so this field can never falsely claim
+an asset was sourced when it wasn't.
+
 ## Verification status
 
-`NOT_STARTED` \| `IN_PROGRESS` \| `VERIFIED` \| `DISPUTED`
+`NOT_STARTED` \| `IN_PROGRESS` \| `VERIFIED` \| `DISPUTED` \|
+`REVIEW_REQUIRED` — the last value added Phase 7C-2: a human must confirm
+this specific asset (e.g. a `HUMAN_PROVIDED` asset with no stated source)
+before it may be used; distinct from `DISPUTED` (an active
+authenticity/licensing conflict) and `NOT_STARTED` (nothing checked yet).
 
 `<what was checked, by whom/what, and when — "not yet verified" is the honest default>`
