@@ -18,15 +18,16 @@ A faceless content channel project built around four equal content pillars:
 - [`templates/`](./templates/) — the content-item schema every piece of
   content is built from (idea → research → script → review → QA →
   publication → learning), plus the production-record schema
-  (`PRODUCTION.md`/`SCENE.md`/`ASSET.md`/`VOICE.md`)
+  (`PRODUCTION.md`/`SCENE.md`/`ASSET.md`/`VOICE.md`/`TIMELINE.md`/
+  `CAPTIONS.md`/`THUMBNAIL.md`/`PRODUCTION_QA.md`)
 - [`agents/`](./agents/) — agent contracts and working MVP
   implementations: three independent review agents (Research/Fact-Check,
   Safety Reviewer, Originality Reviewer) plus a thin orchestrator that
-  runs them in order; and four production agents (Producer, Voice,
-  Visual Planner, Assets) that turn an approved script into structured
-  scenes, a voiceover record, visual requirements, and asset records — no
-  *real* media generation yet (every provider is a deterministic
-  placeholder).
+  runs them in order; and eight production agents (Producer, Voice,
+  Visual Planner, Assets, Assembler, Captions, Thumbnail, Production QA)
+  that turn an approved script all the way through to a human-review-ready
+  production package — no *real* media generation yet (every provider is
+  a deterministic placeholder).
 
 ## Current phase
 
@@ -38,26 +39,30 @@ the first stage that doesn't pass — it makes no review judgment itself.
 Stdlib Python, no dependencies, no scheduling — everything runs only when
 explicitly invoked, dry run by default.
 
-**Phase 7C-2 complete: Asset Generation/Retrieval MVP.** A production
-record schema (`templates/PRODUCTION.md`/`SCENE.md`/`ASSET.md`/
-`VOICE.md`) describes a video as structured data — scenes, narration, a
-voiceover track, visual/asset requirements, claim references.
-`agents/producer/` turns an `APPROVED` script into that structure
-deterministically; `agents/voice/` converts narration into a
-voiceover-audio *record* through a provider-agnostic adapter interface;
-`agents/visual_planner/` finalizes each scene's visual requirement via a
-deterministic Visual Safety Rule that classifies every representational
-asset as `AUTHENTIC_HISTORICAL_MEDIA` (sourcing intent only) or
-`GENERATED_RECONSTRUCTION` — never ambiguous, never presenting generated
-content as real; `agents/assets/` completes that into a full asset
-*record* — a strategy (`GENERATED`/`RETRIEVED`/`HUMAN_PROVIDED`), honest
-provenance, and a QA pass — via the same provider-agnostic pattern, and
-independently reimplements the identical Visual Safety Rule so
-authenticity is always derived from claims, never from strategy or
-filename; an unprovenanced `HUMAN_PROVIDED` asset is flagged
-`REVIEW_REQUIRED` rather than silently trusted. Every provider this phase
-is a deterministic placeholder, permanently labeled as such — none of the
-four agents generates or retrieves any real media — see `STATE.md` for
-what's next (video assembly). Production remains a separate lifecycle
-from content review and can never publish; publishing is, and will
-remain, entirely human-gated — see `CONSTITUTION.md`.
+**Phase 7D complete: Video Assembly + Captions + Thumbnail + Production
+QA.** The full production pipeline now runs end to end, from an
+`APPROVED` script through to `Production status = HUMAN_REVIEW`:
+`agents/producer/` → `agents/voice/` → `agents/visual_planner/` →
+`agents/assets/` → `agents/assembler/` → `agents/captions/` →
+`agents/thumbnail/` → `agents/production_qa/`. `agents/assembler/`
+derives a deterministic, non-overlapping timeline from scene records and
+hands it to a swappable `VideoRenderer` provider (a placeholder manifest
+this phase — no video-encoding tool is installed); `agents/captions/`
+deterministically segments narration into timed caption chunks that are
+always a verbatim substring of the source narration, never paraphrased,
+and never drop safety-critical qualifiers like "may"/"could"/
+"hypothetical"/"we cannot know"; `agents/thumbnail/` produces a
+deterministic thumbnail *specification* via a swappable
+`ThumbnailProvider` (placeholder text this phase, no real image
+generation), hedging `what-if` titles (`"What if: ...?"`) rather than
+implying a hypothetical premise happened; `agents/production_qa/` is the
+final automated gate, independently re-verifying every upstream claim and
+reporting `PASS`/`REVISION_REQUIRED`/`BLOCKED`/`SYSTEM_ERROR` — it can
+advance `Production status` to `HUMAN_REVIEW` at most, on `PASS` only,
+and can never approve or publish anything. Every provider across all
+eight agents is a deterministic placeholder, permanently labeled as such
+— none generates or retrieves any real media. See `STATE.md` for what's
+next (Phase 7E: full pipeline orchestration + self-review loop).
+Production remains a separate lifecycle from content review and can never
+publish; publishing is, and will remain, entirely human-gated — see
+`CONSTITUTION.md`.

@@ -106,6 +106,14 @@ Cut between all scenes (Producer default) — see individual
 Not yet planned — see `agents/visual_planner/`, which populates this
 section once real asset requirements exist. Nothing to roll up yet.
 
+## Assembly / Output
+
+| Field | Value |
+|---|---|
+| Timeline reference | not yet produced |
+| Video output reference | not yet produced |
+| Assembly status | `NOT_STARTED` |
+
 ## Thumbnail
 
 | Field | Value |

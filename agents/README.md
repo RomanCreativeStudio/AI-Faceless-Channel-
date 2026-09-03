@@ -64,19 +64,60 @@ is a separate lifecycle from everything above (see
   `REVIEW_REQUIRED`, never silently trusted as authentic. Has a working
   MVP (`assets/src/`, `assets/README.md`).
 
-None of `producer/`, `voice/`, `visual_planner/`, or `assets/` generates
-or retrieves any *real* media — all four produce structured
-*requirements*/*records* (scenes, a voice record referencing a
-placeholder audio artifact, visual/asset specifications, an asset record
-referencing a placeholder artifact or an unimplemented retrieval
-requirement) for later, unbuilt tooling (or a real TTS/generation/
-retrieval provider) to fulfill.
+Four more have **working MVPs** (Phase 7D) — the rest of the production
+stack, taking a production all the way from `ASSEMBLY` through the final
+automated gate before human review:
+
+- [`assembler/`](./assembler/) — derives a deterministic, non-overlapping
+  `TIMELINE.md` from `SCENE.md` records and hands it to a swappable
+  `VideoRenderer` provider. This phase's only implementation
+  (`LocalTestVideoRenderer`) writes a placeholder manifest text file, not
+  a real video — no video-encoding tool exists in this environment (see
+  `assembler/README.md`'s "Actual video artifact status"). Reuses,
+  never regenerates, existing Voice/Asset output; blocks as `STALE` on
+  any script/asset hash mismatch. Has a working MVP (`assembler/src/`,
+  `assembler/README.md`).
+- [`captions/`](./captions/) — deterministically segments each scene's
+  narration into caption chunks (documented defaults: 40 characters/line
+  x 2 lines/caption) with proportional timing. Every caption is a
+  verbatim substring of the source narration — never paraphrased,
+  rewritten, or grammar-"fixed" — and never drops safety-critical
+  qualifiers (`may`, `could`, `likely`, `hypothetical`, `we cannot know`).
+  Has a working MVP (`captions/src/`, `captions/README.md`).
+- [`thumbnail/`](./thumbnail/) — produces a deterministic thumbnail
+  *specification* (concept, text overlay, focal subject, authenticity
+  considerations) via a swappable `ThumbnailProvider`. This phase's only
+  implementation (`LocalTestThumbnailProvider`) is a text placeholder, not
+  a generated image. Never invents a sensational claim or implies a
+  hypothetical premise happened; hedges a `what-if` pillar's title
+  (`"What if: ...?"`) unless it's already phrased as a question. Also
+  populates `PRODUCTION.md`'s `Title / description` verbatim from
+  `CONTENT_ITEM.md`'s working title — never synthesized copy. Has a
+  working MVP (`thumbnail/src/`, `thumbnail/README.md`).
+- [`production_qa/`](./production_qa/) — the final automated gate:
+  independently re-verifies every upstream claim (content, voice, assets,
+  timeline, captions, thumbnail, output) rather than trusting it, and
+  reports a structured verdict (`PASS`/`REVISION_REQUIRED`/`BLOCKED`/
+  `SYSTEM_ERROR`). Staleness anywhere upstream is always a hard `BLOCKED`
+  gate, never a soft check. **Never** sets `Production status` beyond
+  `HUMAN_REVIEW`, and only on `PASS`; never touches `Human review state`
+  or `CONTENT_ITEM.md`. Has a working MVP (`production_qa/src/`,
+  `production_qa/README.md`).
+
+None of the eight production agents generates or retrieves any *real*
+media — every provider (`VoiceProvider`, `GeneratedAssetProvider`,
+`AssetRetrievalProvider`, `VideoRenderer`, `ThumbnailProvider`) has only a
+deterministic local-test implementation this phase, permanently labeled
+as a placeholder, for later, unbuilt tooling (or a real TTS/generation/
+retrieval/rendering provider) to fulfill.
 
 ## Not yet specified
 
-Editorial review and production QA remain fully human-driven until a
-contract is written and approved here (the orchestrator's pipeline stops
-before them). Publication remains human-gated permanently, by
+Editorial review remains fully human-driven until a contract is written
+and approved here (the orchestrator's pipeline stops before it).
+Production QA now has a working automated MVP (`production_qa/`), but it
+is a **structural** gate only — never a creative/editorial judgment, and
+never an approval. Publication remains human-gated permanently, by
 `CONSTITUTION.md` rule 2, regardless of what gets automated upstream of
 it — see `STATE.md` for what's next.
 
@@ -145,7 +186,7 @@ their logic) plus the same generic pieces from `researcher/src`; it has
 inside the invoked agent's own existing path. No agent requires any other
 to run first or to exist at all.
 
-## The production lifecycle (Phase 7C-2 — Producer + Voice + Visual Planner + Assets MVP)
+## The production lifecycle (Phase 7D — full pipeline through Production QA)
 
 ```
 PRODUCTION_PLANNING → VOICE → VISUAL_PLANNING → ASSET_COLLECTION →
@@ -165,30 +206,48 @@ unreachable) and is itself the one that advances status to
 `visual_planner/` consumes that and advances to `ASSET_COLLECTION` once
 every scene has a finalized visual plan; `assets/` consumes *that* and
 advances to `ASSEMBLY` once every scene's asset record is complete and
-current. Visual Planner's own Phase 7B interim allowance (also accepting
-`PRODUCTION_PLANNING`, not just `VISUAL_PLANNING`) still exists in code —
-unneeded on the real path now that `voice/` genuinely sets
+current; `assembler/` consumes `ASSEMBLY` (also idempotently re-runnable
+against its own `CAPTIONS` output) and advances to `CAPTIONS` once a
+timeline is built and rendered; `captions/` consumes `CAPTIONS` and
+advances to `THUMBNAIL`; `thumbnail/` consumes `THUMBNAIL` and advances to
+`METADATA` (populating `PRODUCTION.md`'s `Title / description` in the same
+run); `production_qa/` consumes `METADATA` and advances to `HUMAN_REVIEW`
+**only on a `PASS` verdict** — a `REVISION_REQUIRED`/`BLOCKED`/
+`SYSTEM_ERROR` result leaves `Production status` at `METADATA`,
+unadvanced. Visual Planner's own Phase 7B interim allowance (also
+accepting `PRODUCTION_PLANNING`, not just `VISUAL_PLANNING`) still exists
+in code — unneeded on the real path now that `voice/` genuinely sets
 `VISUAL_PLANNING`, but left in place rather than touched, out of each of
 Phase 7C-1's and 7C-2's stated scope; see `STATE.md`'s Known limitations.
-The rest of the sequence has neither an agent nor an implementation yet.
-`READY_TO_PUBLISH` is the last state any of this may ever reach — actual
-publishing is a separate, human-driven system, not built in this phase or
-any so far.
+`HUMAN_REVIEW` is the highest state any agent may ever reach this phase —
+`APPROVED` and `READY_TO_PUBLISH` remain exclusively human-set, with no
+automated path around them; actual publishing is a separate, human-driven
+system, not built in this phase or any so far.
 
-All four agents share `agents/producer/src/hashing.py`
-(`compute_script_content_hash`) directly rather than duplicating it —
-`voice/`, `visual_planner/`, and `assets/` each reuse it to re-verify
-`SCRIPT.md` hasn't changed since `producer/` ran, refusing to act on a
-stale production. `voice/` also reuses `visual_planner/src/loader.load_scenes`
-directly (generic scene-file reading, not visual-planning domain logic)
-rather than re-parsing scene files a third time; `assets/` has its own,
-similarly generic scene-field reader (it needs `Visual type`/`Visual
-description` too, which that loader doesn't carry). `assets/`
-deliberately does **not** import `visual_planner/`'s classification
-logic — it reimplements the identical Visual Safety Rule independently,
-preserving the sibling-agent boundary every production agent maintains
-(reuse generic infrastructure across agents, never another agent's own
-domain judgment) — see `agents/assets/CONTRACT.md`'s "Authenticity
+All eight agents share `agents/producer/src/hashing.py`
+(`compute_script_content_hash`) directly rather than duplicating it — each
+downstream agent reuses it to re-verify `SCRIPT.md` hasn't changed since
+`producer/` ran, refusing to act on a stale production. `voice/` also
+reuses `visual_planner/src/loader.load_scenes` directly (generic
+scene-file reading, not visual-planning domain logic) rather than
+re-parsing scene files a third time; `assets/`, `assembler/`, and
+`captions/` each have their own, similarly generic scene-field readers
+(they need fields that loader doesn't carry). `assembler/` reuses
+`agents/assets/src/hashing.compute_asset_content_hash` directly to
+re-verify each scene's asset is current before building the timeline;
+`captions/` reuses `agents/assembler/src/scene_reader.load_scene_timing`
+and `agents/assets/src/scene_reader.load_scene_visual_records` directly.
+`production_qa/` reuses `agents/producer/src/hashing`,
+`agents/assets/src/hashing`, and
+`agents/assets/src/scene_reader.load_scene_visual_records` directly, but
+otherwise **re-verifies everything independently** rather than trusting
+any upstream agent's own claim (e.g. it re-checks caption text against
+narration itself, rather than trusting `captions/`'s own record) — the
+same sibling-agent boundary every production agent maintains: reuse
+generic infrastructure across agents, never another agent's own domain
+judgment. `assets/` and `thumbnail/` each independently reimplement the
+identical Visual Safety Rule rather than importing `visual_planner/`'s
+classification logic — see `agents/assets/CONTRACT.md`'s "Authenticity
 classification".
 
 Each agent has its own hard-coded write whitelist (`mutate.py`):
@@ -206,7 +265,20 @@ update `PRODUCTION.md`'s two rollup sections plus `Production status`;
 `agents/assets/CONTRACT.md`'s "Relationship to `agents/visual_planner/`"
 for exactly how "completing a skeleton" differs from overwriting one) and
 update `PRODUCTION.md`'s `Asset references (rollup)` section plus
-(only once every scene's asset is current) `Production status`.
+(only once every scene's asset is current) `Production status`;
+`assembler/` may only create fresh `timeline/timeline-<n>.md` and
+`output/video-<n>.manifest.txt` files and update `PRODUCTION.md`'s
+`Assembly / Output` section plus `Production status`; `captions/` may
+only create fresh `captions/captions-<n>.md` files and update
+`PRODUCTION.md`'s `Captions` section plus `Production status`;
+`thumbnail/` may only create fresh `thumbnail/thumbnail-<n>.md` files and
+update `PRODUCTION.md`'s `Thumbnail` and `Title / description` sections
+plus `Production status`; `production_qa/` may only create fresh
+`qa/production-qa-<n>.md` files and update `PRODUCTION.md`'s `Production
+QA state` section plus (only on `PASS`, only to `HUMAN_REVIEW`)
+`Production status` — hard-coded in `mutate.py` to raise rather than
+accept any other verdict-to-status mapping; it never touches `Human
+review state`, which stays exclusively human-owned.
 
 See `content/what-if/wi-20260902-black-death-modern-medicine/PRODUCTION.md`
 for the Phase 7A golden fixture demonstrating the schema against real

@@ -5,42 +5,45 @@ Operational architecture for the AI Faceless Channel project. Governed by
 
 ## Current phase
 
-**Phase 6 complete (automated review layer); Phase 7C-2 complete (Asset
-Generation/Retrieval MVP).** Eight agents have working, tested
-implementations, stdlib Python, no dependencies: the Research /
-Fact-Check Agent (`agents/researcher/src/`, FACT_CHECK mode only), the
-Safety Reviewer (`agents/safety/src/`, SAFETY_REVIEW only), the
-Originality Reviewer (`agents/originality/src/`, ORIGINALITY_REVIEW
+**Phase 6 complete (automated review layer); Phase 7D complete (Video
+Assembly + Captions + Thumbnail + Production QA).** Twelve agents have
+working, tested implementations, stdlib Python, no dependencies: the
+Research / Fact-Check Agent (`agents/researcher/src/`, FACT_CHECK mode
+only), the Safety Reviewer (`agents/safety/src/`, SAFETY_REVIEW only),
+the Originality Reviewer (`agents/originality/src/`, ORIGINALITY_REVIEW
 only), the Unified Automated Review Orchestrator
 (`agents/orchestrator/src/`, which runs the three in order and
 aggregates their results — it makes no safety/factual/originality
-judgment of its own; see `agents/orchestrator/CONTRACT.md`), the
-Producer (`agents/producer/src/`, turns an `APPROVED` script into
-`PRODUCTION.md` + `scenes/*.md`, deterministically — no AI creativity
-yet), the Voice agent (`agents/voice/src/`, converts a production's
-narration into a voiceover-audio record via a provider-agnostic adapter
-interface — this phase's only implementation, `LocalTestVoiceProvider`,
-produces a deterministic, clearly-labeled `TEST / PLACEHOLDER AUDIO`
-artifact, never real speech), the Visual Planner
-(`agents/visual_planner/src/`, finalizes each scene's `Visual type`/
-`Visual description` and creates an `assets/*.md` skeleton with an
-explicit authenticity classification via the deterministic Visual Safety
-Rule), and the Assets agent (`agents/assets/src/`, completes each
-scene's asset record with a strategy — `GENERATED`/`RETRIEVED`/
-`HUMAN_PROVIDED` — honest provenance, and a QA pass, via the same
-provider-agnostic pattern as Voice; its only implementations,
-`LocalTestGeneratedAssetProvider`/`LocalTestAssetRetrievalProvider`,
-produce a clearly-labeled placeholder artifact or a structured
-`RETRIEVAL_NOT_IMPLEMENTED` requirement, never a fabricated source).
-None of Producer, Voice, Visual Planner, or Assets generates or
-retrieves any *real* media — see "Production layer" below. Everything
-else remains documentation/templates only: no RESEARCH-mode live
-retrieval, no editorial/production-QA agents, no real TTS/image/video
-generation or retrieval integration, no FFmpeg/assembly, no
-automation/scheduling, no publishing, no external API integration.
-Nothing outside `agents/researcher/`, `agents/safety/`,
-`agents/originality/`, `agents/orchestrator/`, `agents/producer/`,
-`agents/voice/`, `agents/visual_planner/`, and `agents/assets/` executes.
+judgment of its own), the Producer (`agents/producer/src/`, turns an
+`APPROVED` script into `PRODUCTION.md` + `scenes/*.md`, deterministically),
+the Voice agent (`agents/voice/src/`, converts narration into a
+voiceover-audio record via a provider-agnostic adapter — output always
+labeled `TEST / PLACEHOLDER AUDIO`, never real speech), the Visual
+Planner (`agents/visual_planner/src/`, finalizes each scene's visual
+requirement with an explicit authenticity classification via the
+deterministic Visual Safety Rule), the Assets agent
+(`agents/assets/src/`, completes each scene's asset record with a
+strategy — `GENERATED`/`RETRIEVED`/`HUMAN_PROVIDED` — honest provenance,
+and a QA pass), the Assembler (`agents/assembler/src/`, combines scenes/
+voice/assets into a deterministic `templates/TIMELINE.md` schedule and a
+video artifact — a permanently-labeled placeholder manifest, since no
+video-encoding tool exists in this environment), the Captions agent
+(`agents/captions/src/`, deterministic narration segmentation into
+`templates/CAPTIONS.md`, every caption a verbatim substring of its
+source narration), the Thumbnail agent (`agents/thumbnail/src/`, a
+thumbnail *specification* — never a generated image — that hedges a
+`what-if` premise's title concept rather than asserting it as fact), and
+Production QA (`agents/production_qa/src/`, an automated structural
+readiness check across all of the above — `PASS`/`REVISION_REQUIRED`/
+`BLOCKED`/`SYSTEM_ERROR` — that can advance `Production status` to
+`HUMAN_REVIEW` at most, never further). None of these agents generates
+or retrieves any *real* media, and none can publish, approve, or
+schedule anything — see "Production layer" below. Everything else
+remains documentation/templates only: no RESEARCH-mode live retrieval,
+no editorial-review agent, no real TTS/image/video generation or
+retrieval integration, no YouTube/publishing integration, no analytics,
+no learning engine. Nothing outside the twelve agent directories above
+executes.
 
 ## Directory structure
 
@@ -60,7 +63,11 @@ Nothing outside `agents/researcher/`, `agents/safety/`,
 │   ├── PRODUCTION.md         Production record (Phase 7)
 │   ├── SCENE.md               Per-scene record (Phase 7)
 │   ├── ASSET.md                Per-asset record + provenance (Phase 7)
-│   └── VOICE.md                Voiceover record, provider-agnostic (Phase 7)
+│   ├── VOICE.md                Voiceover record, provider-agnostic (Phase 7)
+│   ├── TIMELINE.md             Assembly timeline + output record (Phase 7D)
+│   ├── CAPTIONS.md             Caption chunks + timing (Phase 7D)
+│   ├── THUMBNAIL.md            Thumbnail specification (Phase 7D)
+│   └── PRODUCTION_QA.md        Structural readiness verdict (Phase 7D)
 ├── agents/                  Agent contracts + implementations
 │   ├── researcher/            Research / Fact-Check Agent
 │   │   ├── CONTRACT.md           Design contract
@@ -97,10 +104,30 @@ Nothing outside `agents/researcher/`, `agents/safety/`,
 │   │   ├── README.md             How to run it, module map, limitations
 │   │   ├── src/                  MVP implementation (Phase 7B)
 │   │   └── tests/                Unit + integration tests
-│   └── assets/                  Assets
+│   ├── assets/                  Assets
+│   │   ├── CONTRACT.md           Design contract
+│   │   ├── README.md             How to run it, module map, limitations
+│   │   ├── src/                  MVP implementation (Phase 7C-2)
+│   │   └── tests/                Unit + integration tests
+│   ├── assembler/               Assembler
+│   │   ├── CONTRACT.md           Design contract
+│   │   ├── README.md             How to run it, module map, limitations
+│   │   ├── src/                  MVP implementation (Phase 7D)
+│   │   └── tests/                Unit + integration tests
+│   ├── captions/                Captions
+│   │   ├── CONTRACT.md           Design contract
+│   │   ├── README.md             How to run it, module map, limitations
+│   │   ├── src/                  MVP implementation (Phase 7D)
+│   │   └── tests/                Unit + integration tests
+│   ├── thumbnail/               Thumbnail
+│   │   ├── CONTRACT.md           Design contract
+│   │   ├── README.md             How to run it, module map, limitations
+│   │   ├── src/                  MVP implementation (Phase 7D)
+│   │   └── tests/                Unit + integration tests
+│   └── production_qa/           Production QA
 │       ├── CONTRACT.md           Design contract
 │       ├── README.md             How to run it, module map, limitations
-│       ├── src/                  MVP implementation (Phase 7C-2)
+│       ├── src/                  MVP implementation (Phase 7D)
 │       └── tests/                Unit + integration tests
 └── content/                Content pillar folders (structure only, no code)
     ├── business-stories/
@@ -158,7 +185,7 @@ has a schema (see "Production layer" below) but no implementation.
 approval) and precedes `PUBLISHED`; publishing will never be automated
 per `CONSTITUTION.md` rule 2.
 
-## Production layer (Phase 7C-2 — Producer + Voice + Visual Planner + Assets MVP)
+## Production layer (Phase 7D — full pipeline through Production QA)
 
 Once a content item reaches `status = APPROVED`, `templates/PRODUCTION.md`
 defines a **separate, more granular lifecycle** for turning its script
@@ -173,41 +200,41 @@ HUMAN_REVIEW → APPROVED → READY_TO_PUBLISH
 
 `READY_TO_PUBLISH` is the last state any production agent may ever set —
 actual publishing is a separate, human-driven action with its own
-(not yet built) system, outside this entire phase. A content item's own
-`HUMAN_REVIEW`/`APPROVED` `status` values and this production lifecycle's
-same-named states are deliberately distinct — see `templates/PRODUCTION.md`'s
+(not yet built) system, outside this entire phase. `HUMAN_REVIEW` is the
+highest state any agent this phase actually reaches (Production QA's own
+terminal output, and only on `PASS`) — `APPROVED` and `READY_TO_PUBLISH`
+remain exclusively human-set. A content item's own `HUMAN_REVIEW`/
+`APPROVED` `status` values and this production lifecycle's same-named
+states are deliberately distinct — see `templates/PRODUCTION.md`'s
 "Separation from content lifecycle."
 
-`templates/SCENE.md` records the video as data — narration, timing,
-visual type/description, asset requirement, captions, transitions, and
-claim references per scene — so a future renderer can assemble a video
-from structured records rather than reinterpreting prose.
-`templates/ASSET.md` requires every representational asset to be
-classified `AUTHENTIC_HISTORICAL_MEDIA` or `GENERATED_RECONSTRUCTION`
-(never left implicit), so generated imagery can never be silently
-presented as real historical footage. `templates/VOICE.md` is
-provider-agnostic — no TTS/voice vendor is named anywhere in the schema.
+`templates/SCENE.md` records the video as data; `templates/ASSET.md`
+requires every representational asset to be classified
+`AUTHENTIC_HISTORICAL_MEDIA` or `GENERATED_RECONSTRUCTION` (never left
+implicit); `templates/VOICE.md` is provider-agnostic. Phase 7D adds four
+more schemas following the identical pattern: `templates/TIMELINE.md`
+(the assembled scene-by-scene schedule plus the output artifact record),
+`templates/CAPTIONS.md` (caption chunks and timing, every chunk a
+verbatim substring of its source narration), `templates/THUMBNAIL.md` (a
+specification, never a generated image, with an explicit "must never
+imply something happened if hypothetical" rule), and
+`templates/PRODUCTION_QA.md` (a structural verdict —
+`PASS`/`REVISION_REQUIRED`/`BLOCKED`/`SYSTEM_ERROR` — never an approval).
 
-`agents/producer/`, `agents/voice/`, `agents/visual_planner/`, and
-`agents/assets/` all now have working MVPs, covering `PRODUCTION_PLANNING`
-through `ASSET_COLLECTION` — see "Agent contracts" below. None generates
-or retrieves any *real* media: Producer decomposes an approved script
-into structured scenes with placeholder visual/asset fields; Voice
-converts narration into a voiceover-*record* via a provider-agnostic
-adapter interface whose only implementation produces a deterministic,
-clearly-labeled placeholder artifact (not real speech); Visual Planner
-turns the placeholder visual fields into a structured, explicit visual
-*requirement* with an authenticity classification already decided
-(`AUTHENTIC_HISTORICAL_MEDIA`/`GENERATED_RECONSTRUCTION`/`NOT_APPLICABLE`);
-Assets completes that requirement into a full asset *record* — a
-strategy (`GENERATED`/`RETRIEVED`/`HUMAN_PROVIDED`), honest provenance,
-and a QA pass — via the same provider-agnostic pattern, whose only
-implementations produce a clearly-labeled placeholder artifact or a
-structured `RETRIEVAL_NOT_IMPLEMENTED` requirement, never a fabricated
-source. Actually synthesizing real speech, or sourcing/generating a real
-image/video, is later, unbuilt tooling (a real `VoiceProvider`/
-`GeneratedAssetProvider`/`AssetRetrievalProvider` implementation) —
-`ASSEMBLY` and beyond remain unbuilt.
+All eight production agents now have working MVPs, covering the full
+sequence from `PRODUCTION_PLANNING` through `HUMAN_REVIEW` — see "Agent
+contracts" below. None generates or retrieves any *real* media: every
+provider (`VoiceProvider`, `GeneratedAssetProvider`,
+`AssetRetrievalProvider`, `VideoRenderer`, `ThumbnailProvider`) has only
+a deterministic local-test implementation this phase, and every one of
+their outputs is permanently, honestly labeled as a placeholder. No
+video-encoding tool exists in this environment, so `agents/assembler/`
+produces a manifest describing what a real renderer would assemble, not
+an actual video file — see `agents/assembler/README.md`'s "Actual video
+artifact status". `agents/production_qa/` is the last automated gate: it
+can report a production ready for human review (`Production status =
+HUMAN_REVIEW`) but can never approve, schedule, or publish anything —
+see `agents/production_qa/CONTRACT.md`'s "Verdict states".
 
 ## Agent contracts
 
@@ -279,6 +306,46 @@ how a future orchestrator would run every stage in sequence.
   organization; an unprovenanced `HUMAN_PROVIDED` asset is flagged
   `REVIEW_REQUIRED`, never silently trusted. A changed scene after asset
   generation makes that asset `STALE` — refuses to silently regenerate.
+- `agents/assembler/CONTRACT.md` — Assembler (Phase 7D). Has a working
+  MVP (`agents/assembler/src/`): derives a deterministic, non-overlapping
+  `TIMELINE.md` from `SCENE.md` records and hands it to a swappable
+  `VideoRenderer` provider (this phase's only implementation,
+  `LocalTestVideoRenderer`, writes a placeholder manifest text file, never
+  a real video — no video-encoding tool exists in this environment).
+  Requires content `status = APPROVED`; reuses (never regenerates)
+  existing Voice and Asset output, blocking as `STALE` on any script/asset
+  hash mismatch rather than silently reusing outdated input; never
+  substitutes an unrelated asset for a missing one. Advances `Production
+  status` to `CAPTIONS`.
+- `agents/captions/CONTRACT.md` — Captions (Phase 7D). Has a working MVP
+  (`agents/captions/src/`): deterministically segments each scene's
+  narration into caption chunks (documented defaults: 40 characters/line
+  x 2 lines/caption) with proportional timing. Captions are always a
+  verbatim substring of the source narration — never paraphrased,
+  rewritten, or grammar-"fixed" — and never drop safety-critical
+  qualifiers (`may`, `could`, `likely`, `hypothetical`, `we cannot know`).
+  Advances `Production status` to `THUMBNAIL`.
+- `agents/thumbnail/CONTRACT.md` — Thumbnail (Phase 7D). Has a working
+  MVP (`agents/thumbnail/src/`): produces a deterministic thumbnail
+  *specification* (concept, text overlay, focal subject, authenticity
+  considerations) via a swappable `ThumbnailProvider` (this phase's only
+  implementation, `LocalTestThumbnailProvider`, a placeholder — no real
+  image-generation integration). Never invents a sensational claim or
+  implies a hypothetical premise happened; a `what-if` pillar's title is
+  hedged (`"What if: ...?"`) unless already phrased as a question. Also
+  populates `PRODUCTION.md`'s `Title / description` section verbatim from
+  `CONTENT_ITEM.md`'s own working title — never synthesized copy.
+  Advances `Production status` to `METADATA`.
+- `agents/production_qa/CONTRACT.md` — Production QA (Phase 7D). Has a
+  working MVP (`agents/production_qa/src/`): the final automated gate —
+  independently re-verifies every upstream claim (content, voice, assets,
+  timeline, captions, thumbnail, output) rather than trusting it, and
+  reports a structured verdict (`PASS` / `REVISION_REQUIRED` / `BLOCKED` /
+  `SYSTEM_ERROR`). Staleness in any upstream input is always a hard
+  `BLOCKED` gate, never a soft check. **Never** sets `Production status`
+  to anything beyond `HUMAN_REVIEW`, and only on `PASS` — `APPROVED` and
+  `READY_TO_PUBLISH` remain exclusively human-set; never touches `Human
+  review state` or `CONTENT_ITEM.md`'s own `status`.
 
 All agents: never run unless explicitly invoked (no scheduling, no
 triggers); `--apply` is opt-in, a dry run is the default; never touch
@@ -295,23 +362,43 @@ triggers); `--apply` is opt-in, a dry run is the default; never touch
 - No internet-wide plagiarism/similarity search — the Originality
   Reviewer only compares against explicitly supplied channel metadata
   and reference material.
-- No editorial/production-QA agents yet, so the orchestrator only
-  coordinates the three stages that exist.
+- The automated-review orchestrator only coordinates the three review
+  stages that exist (`FACT_CHECK`, `SAFETY_REVIEW`, `ORIGINALITY_REVIEW`)
+  — production QA (`agents/production_qa/`) is a separate, later gate in
+  the production lifecycle, not part of that orchestrator.
 - No real TTS integration — `agents/voice/`'s only provider
   (`LocalTestVoiceProvider`) produces a deterministic, clearly-labeled
   placeholder text artifact, never real speech; no vendor is named
   anywhere in the schema or code.
-- No actual media generation or retrieval otherwise — `agents/producer/`,
+- No actual media generation or retrieval — `agents/producer/`,
   `agents/voice/`, `agents/visual_planner/`, and `agents/assets/` produce
   structured *requirements*/*records* only (scenes, a voice-record
   referencing placeholder audio, visual/asset specifications, an
   asset-record referencing a placeholder artifact or an unimplemented
   retrieval requirement); no real audio synthesis, no image/video
-  generation integration, no stock-media crawler, no FFmpeg/assembly
-  infrastructure. `ASSEMBLY` and beyond in `templates/PRODUCTION.md`'s
-  `Production status` sequence remain unbuilt.
-- No external API integration (e.g. YouTube), no analytics, no learning
-  engine.
-- No production or publishing pipeline. Reaching
-  `AUTOMATED_REVIEW_COMPLETE` or `READY_TO_PUBLISH` never advances
-  `status` or publishes anything — both stay human/owner-approval-gated.
+  generation integration, no stock-media crawler.
+- No real video rendering — `agents/assembler/`'s only provider
+  (`LocalTestVideoRenderer`) writes a deterministic placeholder manifest
+  text file, never a playable video file; no FFmpeg or other
+  video-encoding tool is installed or invoked anywhere in this phase. No
+  real thumbnail image generation either — `agents/thumbnail/`'s only
+  provider (`LocalTestThumbnailProvider`) produces a text specification,
+  never a generated image.
+- `RETRIEVED`-strategy assets can never reach a genuine `PASS` in
+  Production QA this phase, since no real asset-retrieval integration
+  exists (`agents/assets/`'s `LocalTestAssetRetrievalProvider` always
+  returns `RETRIEVAL_NOT_IMPLEMENTED`) — documented as an intentional,
+  honest limitation, not a bug, in `agents/production_qa/CONTRACT.md` and
+  `README.md`.
+- No sophisticated editing intelligence, cinematic pacing optimization,
+  computer vision, or thumbnail A/B testing/optimization.
+- No external API integration (e.g. YouTube), no analytics, no
+  recommendation/audience-prediction system, no learning engine.
+- No autonomous publishing or approval pipeline. `agents/production_qa/`
+  can advance `Production status` to `HUMAN_REVIEW` at most, only on
+  `PASS` — it can never set `APPROVED` or `READY_TO_PUBLISH`, and never
+  touches `CONTENT_ITEM.md`'s own `status` or `Human review state`. Those
+  remain exclusively human/owner-set, with no automated path around them.
+- No full pipeline orchestration across all eight production agents yet
+  (each is invoked individually) and no self-review/revision loop — see
+  "Exact next task" in `STATE.md` (Phase 7E).

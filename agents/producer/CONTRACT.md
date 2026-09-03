@@ -50,15 +50,17 @@ Producer gets to make.
 - Create/update `PRODUCTION.md`'s own fields (Identity, Production
   status, Scene list rollup, Linked records, Notes/history log) and the
   rollup sections it initializes (Visual requirements rollup, Music/audio
-  rollup, Transitions rollup, Asset references rollup) — not the
-  sections owned by later stages (Voiceover information beyond linking
-  to a not-yet-created voice record, Captions, Thumbnail, Title/
-  description, Production QA state, Human review state all start
-  `NOT_STARTED` and are never populated by the Producer). The Producer
-  only ever writes a placeholder into the Visual requirements/Asset
-  references rollups (nothing to roll up yet) — `agents/visual_planner/`
-  is the one that populates them with real content once it exists; see
-  `agents/visual_planner/CONTRACT.md`'s Allowed actions.
+  rollup, Transitions rollup, Asset references rollup, Assembly / Output
+  — added Phase 7D, initialized `NOT_STARTED` the same way as every
+  other rollup) — not the sections owned by later stages (Voiceover
+  information beyond linking to a not-yet-created voice record, Captions,
+  Thumbnail, Title/description, Production QA state, Human review state
+  all start `NOT_STARTED` and are never populated by the Producer). The
+  Producer only ever writes a placeholder into the Visual requirements/
+  Asset references/Assembly-Output rollups (nothing to roll up yet) —
+  `agents/visual_planner/` and `agents/assembler/` are the ones that
+  populate them with real content once they exist; see those agents'
+  own `CONTRACT.md`'s Allowed actions.
 - Create `scenes/scene-<n>.md` files: Scene ID, Order, Duration
   (estimated), Narration (verbatim from `SCRIPT.md`), Visual type/
   description (a first-pass proposal — Visual Planner's job to finalize),

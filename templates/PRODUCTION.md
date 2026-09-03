@@ -98,6 +98,18 @@ editorial update once real production work (tracked here) is complete.
 
 `<list of assets/asset-<n>.md files this production uses>`
 
+## Assembly / Output
+
+Added Phase 7D (`agents/assembler/CONTRACT.md`) — this section didn't
+exist before there was an agent to populate it; documented here rather
+than left implicit, mirroring every other rollup section's shape.
+
+| Field | Value |
+|---|---|
+| Timeline reference | `<timeline/timeline-<n>.md path, or "not yet produced">` |
+| Video output reference | `<output/video-<n>.<ext> path, or "not yet produced">` |
+| Assembly status | `NOT_STARTED` \| `IN_PROGRESS` \| `ASSEMBLED` \| `REVISION_REQUIRED` |
+
 ## Thumbnail
 
 | Field | Value |
