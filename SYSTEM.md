@@ -6,7 +6,8 @@ Operational architecture for the AI Faceless Channel project. Governed by
 ## Current phase
 
 **Phase 6 complete (automated review layer); Phase 7D complete (Video
-Assembly + Captions + Thumbnail + Production QA).** Twelve agents have
+Assembly + Captions + Thumbnail + Production QA); Phase 7E complete (Full
+Pipeline Orchestration + Self-Review Loop).** Thirteen agents have
 working, tested implementations, stdlib Python, no dependencies: the
 Research / Fact-Check Agent (`agents/researcher/src/`, FACT_CHECK mode
 only), the Safety Reviewer (`agents/safety/src/`, SAFETY_REVIEW only),
@@ -32,18 +33,24 @@ video-encoding tool exists in this environment), the Captions agent
 `templates/CAPTIONS.md`, every caption a verbatim substring of its
 source narration), the Thumbnail agent (`agents/thumbnail/src/`, a
 thumbnail *specification* — never a generated image — that hedges a
-`what-if` premise's title concept rather than asserting it as fact), and
+`what-if` premise's title concept rather than asserting it as fact),
 Production QA (`agents/production_qa/src/`, an automated structural
 readiness check across all of the above — `PASS`/`REVISION_REQUIRED`/
 `BLOCKED`/`SYSTEM_ERROR` — that can advance `Production status` to
-`HUMAN_REVIEW` at most, never further). None of these agents generates
-or retrieves any *real* media, and none can publish, approve, or
-schedule anything — see "Production layer" below. Everything else
-remains documentation/templates only: no RESEARCH-mode live retrieval,
-no editorial-review agent, no real TTS/image/video generation or
-retrieval integration, no YouTube/publishing integration, no analytics,
-no learning engine. Nothing outside the twelve agent directories above
-executes.
+`HUMAN_REVIEW` at most, never further), and the Full Pipeline Orchestrator
+(`agents/full_pipeline/src/`, which sequences all twelve agents above —
+`CONTENT_REVIEW` (itself delegated to `agents/orchestrator/`) through
+`PRODUCTION_QA` — into one call, stopping at the first stage that doesn't
+cleanly succeed; it makes no review, production, or QA judgment of its
+own, has no `mutate.py`, and can never advance any status beyond what
+`agents/production_qa/` itself is already permitted to set). None of
+these agents generates or retrieves any *real* media, and none can
+publish, approve, or schedule anything — see "Production layer" below.
+Everything else remains documentation/templates only: no RESEARCH-mode
+live retrieval, no editorial-review agent, no real TTS/image/video
+generation or retrieval integration, no YouTube/publishing integration,
+no analytics, no learning engine. Nothing outside the thirteen agent
+directories above executes.
 
 ## Directory structure
 
@@ -124,10 +131,15 @@ executes.
 │   │   ├── README.md             How to run it, module map, limitations
 │   │   ├── src/                  MVP implementation (Phase 7D)
 │   │   └── tests/                Unit + integration tests
-│   └── production_qa/           Production QA
-│       ├── CONTRACT.md           Design contract
+│   ├── production_qa/           Production QA
+│   │   ├── CONTRACT.md           Design contract
+│   │   ├── README.md             How to run it, module map, limitations
+│   │   ├── src/                  MVP implementation (Phase 7D)
+│   │   └── tests/                Unit + integration tests
+│   └── full_pipeline/           Full Pipeline Orchestrator
+│       ├── CONTRACT.md           Design contract (coordination only)
 │       ├── README.md             How to run it, module map, limitations
-│       ├── src/                  MVP implementation (Phase 7D)
+│       ├── src/                  Runs all twelve agents in order (Phase 7E), no mutate.py
 │       └── tests/                Unit + integration tests
 └── content/                Content pillar folders (structure only, no code)
     ├── business-stories/
@@ -185,7 +197,7 @@ has a schema (see "Production layer" below) but no implementation.
 approval) and precedes `PUBLISHED`; publishing will never be automated
 per `CONSTITUTION.md` rule 2.
 
-## Production layer (Phase 7D — full pipeline through Production QA)
+## Production layer (Phase 7D production agents; Phase 7E orchestration)
 
 Once a content item reaches `status = APPROVED`, `templates/PRODUCTION.md`
 defines a **separate, more granular lifecycle** for turning its script
@@ -235,6 +247,31 @@ artifact status". `agents/production_qa/` is the last automated gate: it
 can report a production ready for human review (`Production status =
 HUMAN_REVIEW`) but can never approve, schedule, or publish anything —
 see `agents/production_qa/CONTRACT.md`'s "Verdict states".
+
+**Phase 7E adds `agents/full_pipeline/`**, a thin orchestrator sequencing
+all twelve agents above — `agents/orchestrator/`'s own three-stage
+content-review chain, a read-only `CONTENT_APPROVAL_GATE` check, then the
+eight production agents in their real precondition order — into one call.
+It makes no review, production, or QA judgment of its own and has no
+`mutate.py`; every write happens through an invoked agent's own existing
+path. Because `CONTENT_ITEM.md status = APPROVED` may only ever be set by
+a human, this orchestrator's own stage list is really two automatable
+phases separated by a hard human gate — a clean content-review pass with
+the item still unapproved is reported `PASS` (not a failure),
+`human_action_required = True`. **No agent in this codebase can
+autonomously fix a `REVISION_REQUIRED`, `BLOCKED`, or stale result** — every
+production agent's own contract documents "no versioned supersession," so
+this orchestrator invokes each stage's real `run_*` at most once per call
+and never loops in-process; "self-review" instead means safely
+re-invoking the same call later, after something has actually changed
+(a human edit, a future agent) — every stage's own already-existing
+freshness/precondition check, never new invalidation code, determines
+exactly which stages need to re-run. See `agents/full_pipeline/CONTRACT.md`'s
+"Self-review behavior" and "Freshness and invalidation" for the full
+reasoning. `COMPLETE` (Production QA `PASS`, `Production status =
+HUMAN_REVIEW`) is the highest outcome this orchestrator may ever report —
+nothing in this phase, or any phase so far, can reach `APPROVED` or
+`READY_TO_PUBLISH` automatically.
 
 ## Agent contracts
 
@@ -346,6 +383,20 @@ how a future orchestrator would run every stage in sequence.
   to anything beyond `HUMAN_REVIEW`, and only on `PASS` — `APPROVED` and
   `READY_TO_PUBLISH` remain exclusively human-set; never touches `Human
   review state` or `CONTENT_ITEM.md`'s own `status`.
+- `agents/full_pipeline/CONTRACT.md` — Full Pipeline Orchestrator (Phase
+  7E). Has a working MVP (`agents/full_pipeline/src/`): sequences
+  `agents/orchestrator/`'s own content-review chain, a read-only
+  `CONTENT_APPROVAL_GATE`, then all eight production agents in their real
+  precondition order, stopping at the first stage that doesn't cleanly
+  succeed. Makes no review/production/QA judgment of its own; has no
+  `mutate.py` — every write happens through an invoked agent's own
+  existing path. Invokes each stage at most once per call
+  (`MAX_STAGE_ATTEMPTS = 1`) since no agent this phase can autonomously
+  fix a `REVISION_REQUIRED`/`BLOCKED`/stale result; "self-review" means
+  safely re-invoking the same call after something changes out of band,
+  relying entirely on each stage's own existing freshness check. Can
+  never report or cause anything beyond `COMPLETE` (`Production status =
+  HUMAN_REVIEW`).
 
 All agents: never run unless explicitly invoked (no scheduling, no
 triggers); `--apply` is opt-in, a dry run is the default; never touch
@@ -395,10 +446,19 @@ triggers); `--apply` is opt-in, a dry run is the default; never touch
 - No external API integration (e.g. YouTube), no analytics, no
   recommendation/audience-prediction system, no learning engine.
 - No autonomous publishing or approval pipeline. `agents/production_qa/`
-  can advance `Production status` to `HUMAN_REVIEW` at most, only on
-  `PASS` — it can never set `APPROVED` or `READY_TO_PUBLISH`, and never
-  touches `CONTENT_ITEM.md`'s own `status` or `Human review state`. Those
-  remain exclusively human/owner-set, with no automated path around them.
-- No full pipeline orchestration across all eight production agents yet
-  (each is invoked individually) and no self-review/revision loop — see
-  "Exact next task" in `STATE.md` (Phase 7E).
+  (and, through it, `agents/full_pipeline/`) can advance `Production
+  status` to `HUMAN_REVIEW` at most, only on `PASS` — neither can ever set
+  `APPROVED` or `READY_TO_PUBLISH`, and neither touches `CONTENT_ITEM.md`'s
+  own `status` or `PRODUCTION.md`'s `Human review state`. Those remain
+  exclusively human/owner-set, with no automated path around them.
+- No in-process self-fix/retry loop anywhere in `agents/full_pipeline/` —
+  a deliberate architectural finding (Phase 7E), not a missing feature:
+  no agent in this codebase has authority to autonomously regenerate an
+  existing artifact, so "self-review" means safely re-invoking the same
+  call later, after a human (or a not-yet-built future agent) changes
+  something out of band — see `agents/full_pipeline/CONTRACT.md`'s
+  "Self-review behavior".
+- No true multi-stage rollback — a `CONTENT_ITEM.md status = APPROVED`
+  that a human sets is never automatically reverted by a later production
+  failure; every downstream staleness/failure is caught and reported, but
+  nothing in this system undoes an earlier human decision.

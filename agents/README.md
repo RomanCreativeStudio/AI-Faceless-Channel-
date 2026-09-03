@@ -111,6 +111,22 @@ deterministic local-test implementation this phase, permanently labeled
 as a placeholder, for later, unbuilt tooling (or a real TTS/generation/
 retrieval/rendering provider) to fulfill.
 
+One more has a **working MVP** (Phase 7E) — a thin orchestrator over
+everything above:
+
+- [`full_pipeline/`](./full_pipeline/) — sequences `agents/orchestrator/`'s
+  own content-review chain, a read-only `CONTENT_APPROVAL_GATE` check, and
+  the eight production agents in their real precondition order into one
+  call, stopping at the first stage that doesn't cleanly succeed. Makes
+  **no** review/production/QA judgment of its own, has no `mutate.py` —
+  every write happens through an invoked agent's own existing path.
+  Invokes each stage at most once per call; no agent this phase can
+  autonomously fix a `REVISION_REQUIRED`/`BLOCKED`/stale result, so
+  "self-review" means safely re-invoking the same call later, once
+  something has actually changed — see `full_pipeline/CONTRACT.md`'s
+  "Self-review behavior". Has a working MVP (`full_pipeline/src/`,
+  `full_pipeline/README.md`).
+
 ## Not yet specified
 
 Editorial review remains fully human-driven until a contract is written
@@ -286,3 +302,74 @@ content (hand-built, not agent-generated — that content item's `status`
 is intentionally never `APPROVED`, so no agent will ever run `--apply`
 against it; see each agent's `tests/test_approval_gate.py` /
 `test_authenticity_classification.py`).
+
+## Full pipeline orchestration (Phase 7E)
+
+`agents/full_pipeline/` sits one level above everything else on this
+page — it coordinates `agents/orchestrator/` itself (never
+`researcher/`/`safety/`/`originality/` directly) alongside the eight
+production agents:
+
+```
+CONTENT_REVIEW (agents/orchestrator/run_automated_review)
+  -> CONTENT_APPROVAL_GATE (read-only: CONTENT_ITEM.md status == APPROVED)
+    -> PRODUCER -> VOICE -> VISUAL_PLANNER -> ASSETS -> ASSEMBLER
+      -> CAPTIONS -> THUMBNAIL -> PRODUCTION_QA -> (human) HUMAN_REVIEW
+```
+
+**Two automatable phases, separated by a hard human gate.** Because only
+a human may ever set `CONTENT_ITEM.md status = APPROVED`
+(`CONSTITUTION.md` rule 1), this orchestrator cannot itself bridge
+`CONTENT_REVIEW` into production. A clean content-review pass with the
+item still unapproved is reported as `pipeline_status = PASS`,
+`human_action_required = True` — a designed checkpoint, not a failure,
+mirroring how `agents/orchestrator/` itself reports a clean
+`AUTOMATED_REVIEW_COMPLETE` as `PASS`.
+
+**Genuine finding (verified against every agent's real contract before
+writing any orchestration code, not assumed): no agent in this codebase
+can autonomously fix a `REVISION_REQUIRED`, `BLOCKED`, or stale result.**
+Every production agent's own `CONTRACT.md` documents "no versioned
+supersession" — a stale or failing artifact is reported and left
+untouched until a human (or a not-yet-built future agent) changes the
+underlying input. So `agents/full_pipeline/` invokes each stage's real
+`run_*` at most once per call (`MAX_STAGE_ATTEMPTS = 1`) and never loops
+in-process — retrying with unchanged inputs would either no-op
+(production stages) or actively burn down a review agent's own
+two-consecutive-attempts budget for nothing (content review). "Self-review"
+means safely re-invoking `run_full_pipeline` again later, once something
+has actually changed: every stage's own already-existing freshness/
+precondition check — never new orchestrator-level invalidation code —
+determines exactly which stages are already satisfied and which need to
+re-run, fully scoped to what actually depends on the change. See
+`agents/full_pipeline/CONTRACT.md`'s "Self-review behavior" and
+"Freshness and invalidation" for the complete reasoning.
+
+**A real idempotency gap, found and fixed during this phase**: since
+`agents/full_pipeline/` calls every production stage on every
+invocation (it keeps no state of its own between calls), naively
+re-invoking a stage whose job a *later* stage already completed would
+hit that earlier agent's own narrow precondition window and report a
+false `BLOCKED` — e.g. re-invoking `agents/voice/` once `Production
+status` has already advanced to `HUMAN_REVIEW` fails `voice/`'s own
+`ALLOWED_PRODUCTION_STATUSES` check, even though nothing is actually
+wrong. `agents/full_pipeline/src/status_sequence.py` fixes this by
+comparing the *current* `Production status` (read once per stage, never
+written) against the canonical sequence `templates/PRODUCTION.md` already
+documents, skipping a stage only when a later stage has strictly
+superseded it. One consequence, also verified and documented rather than
+silently accepted: a directly-corrupted intermediate artifact (e.g.
+hand-editing `voice/voice-01.md`'s own stored hash after production has
+already reached `HUMAN_REVIEW`) is still caught — but by
+`agents/production_qa/`'s own independent re-verification, not by
+`agents/voice/` itself, since `voice/` is correctly skipped once
+superseded. See `agents/full_pipeline/tests/test_staleness_and_invalidation.py`.
+
+`agents/full_pipeline/` has **no `mutate.py` and no field whitelist of
+its own** (matching `agents/orchestrator/`'s own precedent exactly) —
+every byte written under `apply=True` is written by one of the twelve
+coordinated agents through its own existing, already-tested path.
+`COMPLETE` (`Production status = HUMAN_REVIEW`, on `PRODUCTION_QA`
+`PASS`) is the highest outcome it may ever report — nothing in this
+orchestrator, or any agent it coordinates, can reach `APPROVED` or
+`READY_TO_PUBLISH`.

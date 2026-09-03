@@ -9,339 +9,325 @@ Last updated: 2026-09-03
 **Phase 7B — Producer + Visual Planner MVP — COMPLETE** (unchanged).
 **Phase 7C-1 — Voice Generation MVP — COMPLETE** (unchanged).
 **Phase 7C-2 — Asset Generation / Retrieval MVP — COMPLETE** (unchanged).
-**Phase 7D — Video Assembly + Captions + Thumbnail + Production QA — COMPLETE.**
+**Phase 7D — Video Assembly + Captions + Thumbnail + Production QA — COMPLETE** (unchanged).
+**Phase 7E — Full Pipeline Orchestration + Self-Review Loop — COMPLETE.**
 
-## Completed (Phase 7D)
+## Completed (Phase 7E)
 
 **Step 1 — Inspection:** re-read `CONSTITUTION.md`, `SYSTEM.md`,
-`STATE.md`, `templates/PRODUCTION.md`/`SCENE.md`/`ASSET.md`/`VOICE.md`,
-and every existing agent's `CONTRACT.md`/`src/` before writing any code.
-Confirmed no `ffmpeg` (or any video-encoding tool) is installed in this
-environment (`which ffmpeg` → not found) — treated as an honest MVP
-limitation rather than grounds to install a dependency, matching the
-stdlib-only constraint every prior phase established. Found one real gap
-during inspection: `templates/PRODUCTION.md` had no section to record
-assembly/video output at all — fixed by adding one new, minimal `##
-Assembly / Output` section (see "Schema changes" below) rather than
-inventing a parallel mechanism.
+`STATE.md`, `agents/README.md`, every existing agent's `CONTRACT.md`, and
+`templates/CONTENT_ITEM.md`/`PRODUCTION.md`/`REVIEW.md`/`PRODUCTION_QA.md`
+before writing any code — verified the actual repository rather than
+relying on memory, per the task's explicit instruction. Read every
+production agent's `src/pipeline.py` and `src/models.py` in full to
+confirm the real result-shape convention (`aborted`/`blocked`/`stale`/
+`already_up_to_date`, a `produced`/`planned` success property, `reasons`)
+before designing a single normalizer for all eight, rather than guessing
+from the Phase 7D summary.
 
-**Step 2 — Assembler MVP** (`agents/assembler/src/`):
-- `provider.py` / `test_provider.py` — `VideoRenderer` Protocol
-  (`render(scenes, total_duration) -> RenderResult`);
-  `LocalTestVideoRenderer` deterministically builds a manifest **text**
-  file (scene id/start/end/duration/narration ref/visual ref/transitions,
-  plus a truncated sha256 manifest hash) — explicitly, permanently
-  labeled `TEST / PLACEHOLDER VIDEO MANIFEST — not a real video file`,
-  `Playable` always `NO`.
-- `scene_reader.py` — reads each scene's `Duration` and `## Transition`
-  in/out fields; reused directly by `agents/captions/`.
-- `hashing.py` — `compute_voice_hash_component` /
-  `compute_assembly_content_hash` (script hash + voice hash component +
-  every scene's asset hash) — the assembly-level staleness key.
-- `models.py` — `SceneTimelineEntry` (per-scene start/end/duration/refs/
-  transitions/claim ids), `AssemblyResult`.
-- `mutate.py` — hard-coded whitelist: `timeline/timeline-<n>.md` +
-  `output/video-<n>.manifest.txt`, and `PRODUCTION.md`'s new `Assembly /
-  Output` section + `Production status`.
-- `timeline_writer.py` — renders `templates/TIMELINE.md`.
-- `pipeline.py` (`run_video_assembly(root, apply=False, renderer=None)`)
-  — gates on `CONTENT_ITEM.md status == APPROVED` (independent check),
-  `PRODUCTION.md Production status` in `{ASSEMBLY, CAPTIONS}`, current
-  `SCRIPT.md` hash, `voice/voice-01.md` existing with `Generation status
-  == GENERATED` and a matching stored script hash, every scene loading
-  with contiguous order and resolving claims, and every scene's
-  `assets/asset-<n>.md` matching its current content hash (reusing
-  `agents/assets/src/hashing.compute_asset_content_hash` directly — never
-  substitutes an unrelated asset for a missing/stale one, refuses
-  instead). Builds the timeline (cumulative start/end, total duration ==
-  sum of scene durations, no overlaps by construction), calls the
-  renderer, writes on `--apply`.
-- 21 tests (`agents/assembler/tests/`) — approval/precondition gating (9),
-  timeline determinism (6), mutation boundaries (6) — all passed on first
-  run.
+**Step 2 — Full Pipeline Orchestrator MVP** (`agents/full_pipeline/src/`):
+- `models.py` — stage name constants in the real, verified execution
+  order (`CONTENT_REVIEW → CONTENT_APPROVAL_GATE → PRODUCER → VOICE →
+  VISUAL_PLANNER → ASSETS → ASSEMBLER → CAPTIONS → THUMBNAIL →
+  PRODUCTION_QA`); the six `pipeline_status` values the task requires
+  (`PASS`/`REVISION_REQUIRED`/`BLOCKED`/`ESCALATE_TO_HUMAN`/
+  `SYSTEM_ERROR`/`COMPLETE`); `MAX_STAGE_ATTEMPTS = 1` (documented as
+  permanent, not a placeholder — see "Genuine finding" below);
+  `StageRunOutcome` (per-stage normalized result, carrying the real
+  underlying agent result for detailed inspection); `PipelineResult`
+  (`completed_stages`/`skipped_stages`/`blocked_stages`/`failed_stages`/
+  `escalated_stages`/`revision_requests`/`attempt_counts`/
+  `stale_artifacts`/`human_action_required`+`reason`/`terminal_reason`/
+  `stage_results` — every field the task's Section 2 requires).
+- `stages.py` — `normalize_standard_result(result, apply)`: reads the one
+  shared result shape every production agent except `production_qa`
+  uses, generically, once, for all seven of those agents rather than
+  duplicated per agent (`apply` matters because a dry-run success
+  legitimately reports `produced=False` by every agent's own design — see
+  "Errors and fixes" below); `normalize_qa_result(result, apply)`: reads
+  `agents/production_qa/`'s verdict-shaped result instead. Eight
+  `ProductionStageAdapter`s, each wiring one agent's real `run_*` entry
+  point directly — zero reimplementation of any agent's algorithm,
+  hashing, or write path.
+- `status_sequence.py` — `PRODUCTION_STATUS_SEQUENCE` (verbatim from
+  `templates/PRODUCTION.md`) and `STAGE_COMPLETION_STATUS` (the status
+  value each stage's own success sets, read from each agent's own
+  `pipeline.py`, never guessed) — enables
+  `stage_already_completed_by_a_later_stage`, the fix for a real
+  idempotency bug found this phase (see "Errors and fixes").
+- `pipeline.py` (`run_full_pipeline(root, apply=False,
+  originality_channel_index=None, originality_reference_paths=None)`) —
+  the one entry point. Calls `agents.orchestrator.src.pipeline
+  .run_automated_review` directly for `CONTENT_REVIEW` (never
+  reimplementing its three-stage sequencing, freshness checking, or
+  two-consecutive-attempts gating); maps its `OverallResult` to this
+  orchestrator's own outcome vocabulary via one small translation table,
+  not a new interpretation of what any reviewer's verdict means; performs
+  a read-only `CONTENT_APPROVAL_GATE` check
+  (`agents.researcher.src.loader.load_content_item`, already-generic
+  infrastructure); then walks the eight production adapters in order,
+  skipping a stage the status-sequence check finds already superseded,
+  invoking every other stage exactly once and stopping at the first
+  non-`PASS` outcome. No stage is ever invoked twice in one call.
+- `__main__.py` — CLI (`python -m agents.full_pipeline.src <dir>
+  [--apply]`), prints a deterministic JSON result. No `--publish` flag;
+  none will ever be added.
+- **No `mutate.py` exists for this agent** — matching
+  `agents/orchestrator/`'s own precedent exactly. Every write under
+  `apply=True` happens inside an invoked agent's own existing,
+  already-tested path.
+- 34 tests (`agents/full_pipeline/tests/`) across 8 files, covering all
+  12 required scenarios from the task plus general robustness (dry-run/
+  apply behavior, write-boundary/no-mutate proof, CLI JSON output) — see
+  "Validation performed" for the full breakdown.
 
-**Step 3 — Captions MVP** (`agents/captions/src/`):
-- `segmentation.py` — deterministic algorithm: sentence-split (`re.split
-  (r"(?<=[.!?])\s+", text)`), then word-by-word greedy packing into
-  chunks of at most `max_characters_per_line x max_lines_per_caption`
-  characters (documented defaults 40 x 2 = 80, never splitting a word),
-  timing proportional to each chunk's character-length share of the
-  scene's already-established `Duration`.
-- `hashing.py` — `compute_captions_content_hash` (narration texts in
-  scene order).
-- `mutate.py` — whitelist: `captions/captions-<n>.md` +
-  `PRODUCTION.md`'s `Captions` section + `Production status`.
-- `captions_writer.py` — renders `templates/CAPTIONS.md`, one `### Scene
-  \`<id>\`` H3 subsection per scene nested inside the single `## Scene
-  captions` H2 section, each with its own `| Caption # | Start | End |
-  Text |` table.
-- `pipeline.py` (`run_caption_generation(root, apply=False,
-  max_characters_per_line=40, max_lines_per_caption=2)`) — gates on
-  `Production status` in `{CAPTIONS, THUMBNAIL}`; reuses
-  `agents/assembler/src/scene_reader.load_scene_timing` and
-  `agents/assets/src/scene_reader.load_scene_visual_records` directly.
-  **Caption integrity**: every caption chunk is a verbatim substring of
-  the source narration — never paraphrased, rewritten, or
-  grammar-"fixed" — and safety-critical qualifiers (`may`, `could`,
-  `likely`, `hypothetical`, `we cannot know`) are never dropped, since
-  nothing is ever rewritten in the first place.
-- 17 tests (`agents/captions/tests/`) — segmentation unit tests (7),
-  full-pipeline tests (10) — all passed on first run.
-
-**Step 4 — Thumbnail MVP** (`agents/thumbnail/src/`):
-- `provider.py` / `test_provider.py` — `ThumbnailProvider` Protocol
-  (`generate_spec(title_source, visual_source, hedge_required,
-  authenticity_summary) -> ThumbnailSpec`); `LocalTestThumbnailProvider`
-  deterministically builds title concept/visual concept/text overlay/
-  focal subject/composition, labeled `placeholder specification only,
-  not a real generated image`.
-- **Fact / What If? framing rule** (the one place this agent makes a
-  judgment call, made fully deterministic): `Title concept` is never
-  synthesized prose — built only from `CONTENT_ITEM.md`'s own `Working
-  title`, used verbatim if already hedged (contains `"?"` or starts with
-  `"what if"`/`"could"`/`"might"`), else wrapped in the one fixed
-  template `f"What if: {title}?"` only when `content_pillar ==
-  "what-if"`, else used verbatim for any other pillar. Never invents a
-  sensational claim (e.g. never produces `"THE BLACK DEATH WAS
-  STOPPED!"`); a hypothetical premise is always phrased as a question
-  (e.g. `"COULD MODERN MEDICINE HAVE STOPPED IT?"`).
-- `hashing.py` — `compute_thumbnail_content_hash` (working title +
-  content pillar + every referenced claim's classification, scene
-  order).
-- `mutate.py` — whitelist: `thumbnail/thumbnail-<n>.md` +
-  `PRODUCTION.md`'s `Thumbnail` **and** `Title / description` sections +
-  `Production status` (one call updates both, since Thumbnail is also
-  this phase's minimal metadata support — working title mirrored
-  verbatim, description an explicit placeholder, never synthesized
-  copy).
-- `pipeline.py` (`run_thumbnail_generation(root, apply=False,
-  provider=None)`) — gates on `Production status` in `{THUMBNAIL,
-  METADATA}`; aggregates claim classifications and per-scene asset
-  authenticity classifications (read, never recomputed, from
-  `assets/asset-<n>.md`) into a deterministic `authenticity_considerations`
-  note whenever a `GENERATED_RECONSTRUCTION` scene exists, so the
-  thumbnail spec can never imply generated content is authentic.
-- 13 tests (`agents/thumbnail/tests/`) — all pass (one initial test
-  ordering bug fixed, see "Errors and fixes" below).
-
-**Step 5 — Production QA MVP** (`agents/production_qa/src/`), the final
-automated gate:
-- `models.py` — `VALID_VERDICTS = {PASS, REVISION_REQUIRED, BLOCKED,
-  SYSTEM_ERROR}`; `CheckResult`/`ProductionQAResult`.
-- `checks.py` — seven independent re-verification functions
-  (`check_content`, `check_voice`, `check_assets`, `check_timeline`,
-  `check_captions`, `check_thumbnail`, `check_output`), each re-reading
-  and re-verifying rather than trusting an upstream agent's own claim
-  (e.g. caption text is independently re-checked against narration
-  itself, not assumed faithful because `agents/captions/` says so).
-- `mutate.py` — whitelist: `qa/production-qa-<n>.md` +
-  `PRODUCTION.md`'s `Production QA state` section + (only on `PASS`)
-  `Production status`, hard-coded via a `PermissionError` in
-  `apply_production_qa_state` to accept `HUMAN_REVIEW` and nothing else
-  as the new status, and only `PASS`/`REVISION_REQUIRED` as storable
-  verdicts. Never touches `Human review state`.
-- `qa_writer.py` — renders `templates/PRODUCTION_QA.md`, checks grouped
-  by area (`Content, Voice, Assets, Timeline, Captions, Thumbnail,
-  Output`).
-- `pipeline.py` (`run_production_qa(root, apply=False)`, wrapped in
-  try/except returning `SYSTEM_ERROR` rather than crashing the caller) —
-  gates on `Production status` in `{METADATA, HUMAN_REVIEW}`, then three
-  hard **`BLOCKED`** staleness gates evaluated before any check runs
-  (current script hash vs. `PRODUCTION.md`'s stored one; voice record's
-  stored script hash vs. current; each scene's asset content hash vs.
-  current, reusing `agents/assets/src/hashing.compute_asset_content_hash`
-  directly) — staleness is never a soft check, since a QA pass evaluated
-  against outdated inputs can't be trusted at all, the same reasoning
-  `agents/assembler/`'s, `agents/captions/`'s, and `agents/thumbnail/`'s
-  own preconditions already use. Then a required-artifact-existence gate
-  (voice/timeline/captions/thumbnail all present or `BLOCKED`). Then all
-  seven `check_*` functions run and aggregate into `PASS` (zero failed
-  checks) or `REVISION_REQUIRED` (one or more failed).
-- **Known limitation, found and documented rather than routed around**:
-  `RETRIEVED`-strategy assets can never fully pass this phase, since
-  `agents/assets/`'s `LocalTestAssetRetrievalProvider` always returns
-  `RETRIEVAL_NOT_IMPLEMENTED` — a `RETRIEVED` asset's `Generation/
-  retrieval status` can only legitimately be `NOT_STARTED` this phase, so
-  any production containing an all-`FACT` scene (which defaults to
-  `RETRIEVED`) correctly and honestly reports `REVISION_REQUIRED`, never
-  a false `PASS`. See "Genuine finding" below.
-- 25 tests (`agents/production_qa/tests/`) — pipeline tests covering
-  tasks 32-43 (19 tests) and full-pipeline integration tests covering
-  tasks 44-50 (6 tests) — all pass after the fixes below.
-
-**Step 6 — Schema changes** (all additive; the Phase 7A golden fixture
-remains valid as-is, since it never reaches these later production
-stages):
-1. `templates/PRODUCTION.md` — new `## Assembly / Output` section
-   (`Timeline reference`/`Video output reference`/`Assembly status`),
-   inserted between `Asset references (rollup)` and `Thumbnail`,
-   initialized `NOT_STARTED` by `agents/producer/` the same way as every
-   other rollup, populated by `agents/assembler/`.
-2. `templates/TIMELINE.md` (new) — identity table (Timeline/Content/
-   Production ID, Assembly content hash, Total duration), `## Scene
-   timeline` table, `## Output` table (`Playable` — `YES`/`NO`/
-   `UNVERIFIED`, documented as never `YES` unless independently confirmed
-   by the renderer that produced it), `## Assembly status`.
-3. `templates/CAPTIONS.md` (new) — identity table (incl. `Max characters
-   per line`/`Max lines per caption`, both explicit, never hidden
-   defaults), `## Scene captions` (per-scene `### Scene \`<id>\`` H3
-   subsections each with their own caption table), `## Generation
-   status`.
-4. `templates/THUMBNAIL.md` (new) — identity table, `## Concept` table,
-   `## Claim / theme relationship`, `## Authenticity considerations`,
-   `## Generation strategy`, `## Thumbnail status`.
-5. `templates/PRODUCTION_QA.md` (new) — identity table (incl. `Verdict`:
-   `PASS`/`REVISION_REQUIRED`/`BLOCKED`/`SYSTEM_ERROR`), `## Checks`
-   grouped by area, `## Reasons`, `## Notes`.
-
-**Step 7 — Isolated test fixtures:** every new agent's tests build a
-fresh, isolated, `status = APPROVED` content item in a
-`tempfile.TemporaryDirectory()`, reusing every real upstream pipeline
-(`agents/producer/`, `agents/voice/`, `agents/visual_planner/`,
-`agents/assets/`, and each new agent's own predecessor) rather than
-hand-rolling any production file. The real golden sample's
-`CONTENT_ITEM.md status` remains untouched.
-
-**Step 8 — Documentation:** `agents/assembler/CONTRACT.md`/`README.md`,
-`agents/captions/CONTRACT.md`/`README.md`,
-`agents/thumbnail/CONTRACT.md`/`README.md`,
-`agents/production_qa/CONTRACT.md`/`README.md` (all new);
-`agents/producer/CONTRACT.md`/`src/production_writer.py` (updated for the
-new `Assembly / Output` rollup); `SYSTEM.md`, `README.md` (root),
-`agents/README.md`, `STATE.md` (this file) — all updated.
+**Step 3 — Documentation:** `agents/full_pipeline/CONTRACT.md`/`README.md`
+(new); `SYSTEM.md`, `README.md` (root), `agents/README.md`, `STATE.md`
+(this file) — all updated.
 
 ## Errors and fixes (this phase)
 
-1. **`check_assets` read the wrong table for asset strategy.** Initially
-   read `Generated vs. retrieved` from the top identity table, but that
-   field actually lives inside the asset's own `## Provenance` section.
-   `strategy` was always empty, so no strategy-specific check ever ran —
-   silently passing productions that should have failed. Found via manual
-   CLI smoke-testing (a FACT-only fixture produced `PASS` instead of the
-   expected `REVISION_REQUIRED`). Fixed by parsing the `## Provenance`
-   section's own table; re-verified both the FACT-only fixture (now
-   correctly `REVISION_REQUIRED`) and the all-hypothetical fixture (still
-   `PASS`).
-2. **Markdown table separator-row filter was broken** in `check_timeline`
-   and `check_captions` — `line.strip().strip("|")` only strips leading/
-   trailing pipes, not the internal ones in `"|---|---|---|"`. Fixed by
-   `line.replace("|", "").strip()` then checking the remainder is all
-   `"-"`.
-3. **H3-within-H2 parsing gap** — `check_captions` looked up
-   `sections.get(f"Scene \`{id}\`", "")` on `parsing.parse_sections`'s
-   output, but that helper only splits on `## ` while
-   `captions_writer.py` nests per-scene bodies as `### Scene \`...\``
-   inside one `## Scene captions` H2 section. Fixed with a new
-   `_split_h3_subsections` helper.
-4. **Dead/unreachable code in `check_output`** — a leftover
-   `if False else None` expression. Fixed by changing the function's
-   signature to take `production_text` directly and properly parse the
-   `Title / description` section.
-5. **Staleness was initially a soft check, not a hard gate.** Re-reading
-   the task's own test list (staleness tests expect `BLOCKED` only, no
-   `REVISION_REQUIRED` alternative, unlike the present-but-incomplete
-   tests which explicitly allow either) revealed this was architecturally
-   wrong before any test even ran. Fixed by adding three explicit
-   `BLOCKED` gates in `pipeline.py`, ahead of all seven checks.
-6. **Test ordering bug in `agents/thumbnail/tests/`** — one test
-   registered a new claim *after* the builder had already run Producer
-   (which validates claim references at build time), reproducing the
-   identical ordering bug from earlier phases. Fixed by moving claim
-   registration into the builder's own `extra_claims` parameter.
+1. **Dry-run success was misclassified as `SYSTEM_ERROR`.** Every
+   production agent's `produced`/`planned` success property is only ever
+   `True` once `apply=True` actually wrote something (e.g.
+   `agents/producer/src/models.py`'s `produced` property is
+   `bool(self.production_path)`, and `production_path` stays `""` on a
+   dry run even when nothing failed). `normalize_standard_result`
+   initially had no way to distinguish "dry run, would have succeeded"
+   from "nothing happened, something's wrong," and fell through to
+   `SYSTEM_ERROR` for every dry-run success. **Found** via a test
+   asserting a full dry-run chain reaches `COMPLETE`. **Fixed** by
+   passing `apply` into the normalizer: once every failure/staleness
+   check has cleared and `apply` is `False`, a `produced=False` result is
+   correctly a `PASS`, not an anomaly. Re-verified: a dry run immediately
+   following a real `apply=True` run now correctly reaches `COMPLETE`
+   with zero file changes (`test_dry_run_after_apply_is_side_effect_free`).
+2. **A first-time dry run against a completely fresh item cannot reach
+   `COMPLETE` — this is correct dry-run semantics, not a bug, and the
+   original test's assumption was wrong.** A dry run never writes
+   `PRODUCTION.md`, so a downstream stage invoked in the *same* dry run
+   genuinely has nothing to read yet and correctly reports
+   `SYSTEM_ERROR`/`BLOCKED` (every single agent has this identical
+   limitation standalone). **Fixed** by correcting the test's expectation
+   rather than the orchestrator: a fresh dry run is only meaningfully
+   validated one stage at a time; the useful, tested dry-run guarantee is
+   "a dry run after real artifacts already exist changes nothing," not
+   "a dry run simulates an entire multi-artifact chain end to end."
+3. **A real idempotency bug: re-invoking the pipeline after production
+   already advanced past a stage produced a false `BLOCKED`.** Each
+   production agent's own `ALLOWED_PRODUCTION_STATUSES` accepts only its
+   own narrow re-entry window (e.g. `agents/voice/`'s is exactly
+   `{PRODUCTION_PLANNING, VISUAL_PLANNING}`) — correct and sufficient for
+   that agent standalone, but this orchestrator calls *every* stage on
+   *every* invocation (it keeps no state of its own between calls — see
+   "Genuine finding" below for why). Once a later stage genuinely
+   advanced `Production status` past an earlier one (e.g. all the way to
+   `HUMAN_REVIEW`), re-invoking that earlier stage hit its own
+   precondition gate and reported a false `BLOCKED`, even though nothing
+   was actually wrong. **Found** via a smoke test calling
+   `run_full_pipeline` a third time against an already-`COMPLETE` item —
+   `VOICE` came back `BLOCKED` with `"Production status is 'HUMAN_REVIEW'
+   ... require ['PRODUCTION_PLANNING', 'VISUAL_PLANNING']"`. **Fixed** by
+   adding `status_sequence.py`: before invoking a stage, this
+   orchestrator reads (never writes) `PRODUCTION.md`'s current
+   `Production status` and compares it against the canonical sequence
+   `templates/PRODUCTION.md` already documents (not a new, competing
+   source of truth — the same one every agent's own precondition already
+   derives from). A stage is skipped, reported as an implicit `PASS`
+   ("a later stage already completed this one's job"), only when the
+   current status has moved *strictly past* that stage's own completion
+   status — never when it merely equals that stage's own accepted
+   re-entry window, which stays governed entirely by that agent's own
+   logic. Re-verified: a third consecutive call against an already-
+   `COMPLETE` item now correctly reports `COMPLETE` again, with every
+   already-superseded stage marked `executed=False` and only
+   `PRODUCTION_QA` genuinely re-invoked.
 
-Every other new module (Assembler's 21 tests, Captions' 17 tests) passed
-on the first run.
-
-## Validation performed
-
-1. Combined suite — `python3 -m unittest discover -s agents -t . -p
-   "test_*.py"` — **323/323 pass, 0 regressions** (247 pre-existing + 21
-   Assembler + 17 Captions + 13 Thumbnail + 25 Production QA).
-2. Every agent's own suite re-run individually and green: researcher 43,
-   safety 27, originality 31, orchestrator 30, producer 20, voice 33,
-   visual_planner 18, assets 45, assembler 21, captions 17, thumbnail 13,
-   production_qa 25.
-3. Golden-sample safety: `git status --short -- content/` empty after
-   every test run; a dedicated `test_golden_sample_never_modified` in
-   every new agent plus a full end-to-end
-   `test_golden_sample_untouched_by_full_pipeline` in
-   `agents/production_qa/tests/test_integration.py` running all seven
-   new/reused `apply=True` agents against the real golden sample and
-   confirming zero byte-level changes.
-4. No publishing capability anywhere: AST-based scans (checking for
-   `upload`/`publish`/`post_video`/`youtube`/`schedule_publish`
-   identifiers) across every new agent's `src/`, individually and in one
-   combined integration-level scan, plus a behavioral test confirming
-   `Production status` never becomes anything beyond `HUMAN_REVIEW` after
-   a full real pipeline run.
-5. Manual CLI smoke test of the entire 8-agent pipeline (`producer` →
-   `voice` → `visual_planner` → `assets` → `assembler` → `captions` →
-   `thumbnail` → `production_qa`, each `--apply`) against a fresh
-   isolated fixture: confirmed `Production status` reaches exactly
-   `HUMAN_REVIEW` with `verdict: PASS`.
-6. Dry-run/apply safety, immutable history (never overwrites an existing
-   finished artifact — a changed upstream input blocks rather than
-   silently regenerating), and hard-coded write whitelists verified in
-   every new agent's own `test_mutation_boundaries.py`/equivalent.
+Every other module (`models.py`, `stages.py`'s QA normalizer,
+`pipeline.py`'s `CONTENT_REVIEW`/`CONTENT_APPROVAL_GATE` handling) passed
+its own tests on the first run.
 
 ## Genuine finding
 
-Same as Phase 7C-2's finding (Voice must run before Visual Planner, not
-after, for the pipeline to be reachable at all) — carried forward
-unchanged since it still governs every new agent's precondition. New
-finding this phase: **the `RETRIEVED` asset strategy can never legitimately
-reach `PASS` in Production QA**, because no real asset-retrieval
-integration exists anywhere in this codebase (`LocalTestAssetRetrievalProvider`
-always returns `RETRIEVAL_NOT_IMPLEMENTED`, never `RETRIEVED`). This is
-not a bug to route around — it's an honest, correct reflection of what's
-actually built: a production is only genuinely ready for human review
-this phase if every scene is hypothetical/generated/non-representational,
-or `HUMAN_PROVIDED` with real stated provenance. Documented in
-`agents/production_qa/CONTRACT.md` and `README.md`, and encoded
-explicitly in `agents/production_qa/tests/builders.py`'s
-`build_passing_item` (deliberately all-`ASSUMPTION`/`SPECULATION` claims,
-never all-`FACT`).
+**No agent in this codebase — none of the twelve coordinated by
+`agents/full_pipeline/` — has authority to autonomously regenerate,
+overwrite, or fix an existing artifact once written.** Verified against
+every agent's actual `CONTRACT.md` before writing any orchestration code,
+not assumed from the task's own description of what a "self-review loop"
+should do. Every production agent's own contract documents "no versioned
+supersession": a stale or QA-failing artifact is reported and left
+untouched, permanently, until a human (or a not-yet-built future agent)
+changes the underlying input out of band. `templates/REVIEW.md` rule 5
+permits a review agent to "fix and create the next attempt" autonomously
+for `REVISION_REQUIRED` — but nothing in `agents/researcher/`,
+`agents/safety/`, or `agents/originality/` implements the *fixing* half
+of that (no `RESEARCH`-mode implementation exists this phase, per
+`SYSTEM.md`'s own "Out of scope"); only a human editing `SCRIPT.md`/
+`claims/` and re-invoking the same stage constitutes a fix today.
+
+This makes the task's literal "self-review loop" steps 4-7 (perform the
+permitted revision, re-run the affected stage, re-run downstream stages,
+run Production QA again) a **provable no-op within a single call** — an
+in-process retry with unchanged inputs either wastes a call
+(production stages, whose own precondition would report the identical
+unresolved issue) or actively harms the system (content-review stages,
+where a bare re-invocation with nothing fixed would create a second,
+identical-verdict review attempt purely to burn down the
+two-consecutive-attempts budget faster, for zero benefit). So
+`agents/full_pipeline/` deliberately never loops in-process
+(`MAX_STAGE_ATTEMPTS = 1`, enforced, not a placeholder). "Self-review"
+instead means: **call `run_full_pipeline` again, later, after something
+actually changed.** Because every stage's own freshness/precondition
+check is already fully general and reused unmodified, this correctly and
+automatically re-runs exactly the affected stage and every downstream
+stage whose dependency changed — with zero new invalidation code — while
+leaving every unrelated, still-fresh artifact untouched. Proven via
+`agents/full_pipeline/tests/test_self_review.py`'s
+`test_pipeline_resumes_after_fix_applied_between_calls` (fixes a
+`REVISION_REQUIRED` fact-check between two separate calls; the second
+call resumes correctly) and
+`test_staleness_and_invalidation.py`'s downstream-invalidation tests.
+
+A related, secondary finding, discovered while building the idempotency
+fix above: **`agents/safety/`'s and `agents/originality/`'s own
+`Reviewed content hash` includes `CONTENT_ITEM.md`'s full raw text**
+(the docstring in `agents/safety/src/hashing.py` says "Identity table
+text," but the code hashes `bundle.content_item.raw_text` — the whole
+file), and **both agents append a Notes/history log entry to
+`CONTENT_ITEM.md` as part of the very `apply` call that computed that
+hash.** The result: their own just-recorded `PASS` is immediately stale
+relative to the note they just appended, so every repeat invocation
+regenerates a fresh (still correct, never fabricated) review attempt —
+`reviews/safety_reviewer-*.md` and `reviews/originality_reviewer-*.md`
+grow by one on every `apply=True` call, unlike `reviews/fact_checker-*.md`
+(whose hash does not include `CONTENT_ITEM.md`, so it stays genuinely
+stable). This is a pre-existing characteristic of those two agents, not
+introduced by this orchestrator, and fixing it is out of this phase's
+scope (touching another agent's own hashing/write path is exactly the
+sibling-agent boundary this project has maintained since Phase 6). Noted
+here, and in `agents/full_pipeline/tests/test_staleness_and_invalidation.py`'s
+own test docstring, as an honest observation rather than something
+silently routed around.
+
+## A near-miss caught during validation
+
+While writing `agents/full_pipeline/tests/test_integration.py`'s golden-
+sample test, an early draft called `run_full_pipeline(GOLDEN_SAMPLE,
+apply=True)` — content review is legitimately allowed to write against
+non-`APPROVED` content (that's how `agents/researcher/`/`safety/`/
+`originality/` are designed to work), so this call genuinely created
+`reviews/*.md` files and updated the golden sample's own `CONTENT_ITEM.md`
+`Fact-check state` field. **This was caught immediately via `git status
+--short -- content/` before committing anything**, and reverted in full
+(`git checkout -- content/.../CONTENT_ITEM.md`; `rm -rf
+content/.../reviews/`), confirmed clean via a second `git status` check.
+The test was then corrected to use `apply=False` — matching
+`agents/orchestrator/tests/test_integration.py`'s own established
+convention for this exact reason — which still proves the same
+zero-mutation guarantee without ever risking a real write. This is
+exactly the kind of check-before-you-commit discipline this project's
+own constraints require, recorded here rather than left implicit.
+
+## Validation performed
+
+1. `agents/full_pipeline/tests/` — 34/34 pass, covering all 12 required
+   scenarios: (1) clean all-pass pipeline reaching `COMPLETE` with every
+   artifact produced; (2) safety escalation (impersonation, `HIGH_RISK`)
+   stops before any production stage runs; (3) originality escalation
+   (ambiguous similarity, `REVIEW_REQUIRED`) likewise; (4) a directly-
+   corrupted voice hash is caught (by Production QA's own independent
+   re-check, since `VOICE` is correctly skipped once superseded — see
+   "Errors and fixes" #3); (5) a directly-corrupted asset hash likewise;
+   (6) a genuine Production QA failure (the honest `RETRIEVED`-strategy
+   limitation, not fabricated) reported as `REVISION_REQUIRED` with every
+   earlier stage still marked complete; (7) the pipeline resumes
+   correctly after a real fix is applied between two separate calls; (8)
+   two consecutive `REVISION_REQUIRED` verdicts hit the underlying
+   agent's own two-consecutive-attempts limit and escalate; (9) human
+   escalation is always named explicitly (`human_action_required` +
+   `human_action_reason` citing the exact stage); (10) missing/malformed
+   content and a structurally-broken `CONTENT_ITEM.md` both produce
+   `SYSTEM_ERROR`, never a false `PASS`; (11) a `SCRIPT.md` change is
+   caught at the earliest possible point (`PRODUCER`), with every later
+   stage correctly skipped and an unrelated asset edit never touching
+   voice or fact-check history; (12) no publishing identifier
+   (`upload`/`publish`/`post_video`/`youtube`/`schedule_publish`) exists
+   anywhere in `agents/full_pipeline/src/` (AST-checked), no `--publish`
+   CLI flag, no `mutate.py` at all, and a `COMPLETE` run never sets
+   `Production status` beyond `HUMAN_REVIEW` or `CONTENT_ITEM.md`'s
+   `status` to `PUBLISHED`.
+2. Additional coverage beyond the 12 required scenarios: dry-run-before-
+   any-apply behavior (correctly limited, per finding #2 above);
+   dry-run-after-apply is fully side-effect-free; `apply` never touches
+   `claims/*.md`, `PRODUCTION.md`'s `Human review state`, or
+   `CONTENT_ITEM.md`'s `status` itself; `MAX_STAGE_ATTEMPTS` is exactly
+   `1` and enforced; a production-stage `REVISION_REQUIRED` is never
+   silently converted into a `PASS` on a bare re-run; the CLI prints
+   valid, complete JSON and defaults to dry-run.
+3. Combined suite — `python3 -m unittest discover -s agents -t . -p
+   "test_*.py"` — **357/357 pass, 0 regressions** (323 pre-existing + 34
+   Full Pipeline Orchestrator).
+4. Every agent's own suite re-run individually and green: researcher 43,
+   safety 27, originality 31, orchestrator 30, producer 20, voice 33,
+   visual_planner 18, assets 45, assembler 21, captions 17, thumbnail 13,
+   production_qa 25, full_pipeline 34.
+5. Golden-sample safety: `git status --short -- content/` confirmed empty
+   after the full suite; `agents/full_pipeline/tests/test_integration.py`'s
+   `test_golden_sample_never_modified` runs a **dry-run-only**
+   `run_full_pipeline` against the real golden sample (matching
+   `agents/orchestrator/tests/`'s own established convention exactly,
+   for the reason recorded in "A near-miss caught during validation"
+   above) and confirms zero byte-level changes.
+6. No publishing capability anywhere: AST-based scan across
+   `agents/full_pipeline/src/` (checking for `upload`/`publish`/
+   `post_video`/`youtube`/`schedule_publish` identifiers), confirmation
+   that no `--publish` CLI flag exists and no `mutate.py` file exists at
+   all, and a behavioral test confirming a full, genuine `COMPLETE` run
+   never sets `Production status` beyond `HUMAN_REVIEW`.
+7. Manual CLI smoke tests of the full 9-invocation sequence (content
+   review pass → simulated human approval → full production run reaching
+   `COMPLETE`; a third repeat call confirming idempotency; corrupted-hash
+   and `SCRIPT.md`-edit scenarios) against fresh isolated fixtures before
+   any test file was written, to validate the design empirically first.
 
 ## Known limitations
 
-- No real video rendering — `agents/assembler/`'s only provider
-  (`LocalTestVideoRenderer`) writes a placeholder manifest, never a
-  playable video; no video-encoding tool is installed in this
-  environment.
-- No real thumbnail image generation — `agents/thumbnail/`'s only
-  provider (`LocalTestThumbnailProvider`) produces a text specification,
-  never a generated image.
-- `RETRIEVED`-strategy assets can never fully pass Production QA this
-  phase — see "Genuine finding" above; this is intentional and honest,
-  not a shortcut.
-- No versioned assembly/caption/thumbnail/QA supersession — one attempt
-  (`-01`) per production this phase; a stale artifact is reported and
-  left untouched, matching every prior phase's identical documented
-  limitation for `producer/`/`voice/`/`assets/`.
-- Production QA is structural only — no visual-quality, pronunciation,
-  or historical-accuracy evaluation exists or is claimed.
-- No full pipeline orchestration across all eight production agents yet
-  (each is invoked individually via its own CLI) and no self-review/
-  revision loop that automatically re-runs a stage after a
-  `REVISION_REQUIRED` fix.
-- `agents/visual_planner/`'s Phase 7B interim allowance (accepting
-  `Production status = PRODUCTION_PLANNING`) remains unremoved, same
-  documented limitation carried over from every prior phase.
-- No actual publishing, YouTube integration, analytics, or learning
-  system exists anywhere — `HUMAN_REVIEW` remains the highest state any
-  agent may ever reach; `APPROVED` and `READY_TO_PUBLISH` remain
-  exclusively human-set, per `CONSTITUTION.md` rule 2.
+- No in-process self-fix/retry loop — a deliberate, verified
+  architectural finding (see "Genuine finding" above), not a missing
+  feature. `MAX_STAGE_ATTEMPTS = 1` is permanent.
+- No new persisted artifact type — a full pipeline run's result
+  (`PipelineResult`) is never written to disk by this orchestrator; only
+  the twelve underlying agents' own existing outputs are.
+- `agents/safety/`'s and `agents/originality/`'s own review-attempt
+  counts grow by one on every repeat `apply=True` invocation, even with
+  nothing substantively changed — a pre-existing characteristic of those
+  two agents (see "Errors and fixes" #3's secondary finding), not
+  introduced or fixed by this orchestrator, and out of this phase's scope
+  to change.
+- Inherits every one of the twelve coordinated agents' own documented
+  limitations unchanged: no real TTS/rendering/image-generation
+  integration, `RETRIEVED`-strategy assets can never pass Production QA
+  this phase, no versioned artifact supersession, no editorial-review
+  agent, no RESEARCH-mode live retrieval.
+- No true rollback — a human-set `CONTENT_ITEM.md status = APPROVED` is
+  never automatically reverted by a later production failure; every
+  downstream staleness/failure is caught and reported, but nothing in
+  this system undoes an earlier human decision.
+- Content-review escalation categories (`REJECT` and `HUMAN_ESCALATION`
+  from `agents/orchestrator/`) are both folded into this orchestrator's
+  own `ESCALATE_TO_HUMAN` outcome for simplicity, matching the task's own
+  six-value vocabulary — the finer distinction between them remains fully
+  visible in `stage_results[CONTENT_REVIEW].raw_result`
+  (the real, unmodified `OrchestratorResult`) for anyone who needs it.
 
 ## Next task
 
-**Phase 7E — Full Pipeline Orchestration + Self-Review Loop**: a thin
-orchestrator that runs all eight production agents in sequence
-(`producer → voice → visual_planner → assets → assembler → captions →
-thumbnail → production_qa`), stopping at the first stage that blocks or
-aborts, mirroring `agents/orchestrator/`'s existing pattern for the
-content-review agents; plus a self-review loop that can re-run a single
-stage after its `REVISION_REQUIRED` cause is fixed, without ever
-re-running or overwriting a stage that already succeeded. Still no
-YouTube publishing, no analytics, no learning systems — publishing
-remains permanently human-gated per `CONSTITUTION.md` rule 2. Not started
-yet.
+No further phase was specified as "exact next task" by this phase's
+instructions beyond delivering this report. A natural continuation, not
+yet started, would be a genuine autonomous-fix capability for at least
+one stage (e.g. a `RESEARCH`-mode implementation that could legitimately
+let `agents/researcher/` "fix and create the next attempt" per
+`templates/REVIEW.md` rule 5, rather than only re-evaluating unchanged
+evidence) — but this remains explicitly unbuilt and unscoped until a
+future phase names it. Publishing remains permanently human-gated per
+`CONSTITUTION.md` rule 2, regardless of anything built so far.
