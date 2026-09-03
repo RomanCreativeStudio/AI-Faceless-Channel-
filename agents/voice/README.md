@@ -15,6 +15,6 @@ be chosen (or swapped) later without a schema change.
 ## Relationship to other agents
 
 Runs after `agents/producer/` (which produces the scenes this agent reads
-narration from) and before `agents/visual-planner/` in
+narration from) and before `agents/visual_planner/` in
 `templates/PRODUCTION.md`'s `Production status` sequence
 (`PRODUCTION_PLANNING → VOICE → VISUAL_PLANNING → ...`).

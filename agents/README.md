@@ -29,20 +29,33 @@ override it. No agent has publishing authority, ever, at any stage.
   `orchestrator/CONTRACT.md`'s "Important distinction." Has a working
   MVP (`orchestrator/src/`, `orchestrator/README.md`).
 
-Three more have **contracts only, no implementation yet** — Phase 7's
-foundation for the production stack, which starts once a content item
-reaches `status = APPROVED` and is a separate lifecycle from everything
-above (see `templates/PRODUCTION.md`):
+Two more have **working MVPs** (Phase 7B) — the start of the production
+stack, which begins once a content item reaches `status = APPROVED` and
+is a separate lifecycle from everything above (see
+`templates/PRODUCTION.md`):
 
 - [`producer/`](./producer/) — turns an approved script into
-  `PRODUCTION.md` + `scenes/*.md`. Never writes to `CONTENT_ITEM.md`,
-  changes a claim, or bypasses human approval.
+  `PRODUCTION.md` + `scenes/*.md`, deterministically (word-count/WPM
+  duration, verbatim narration decomposed into scenes, no invented
+  content). Never writes to `CONTENT_ITEM.md`, changes a claim, or
+  bypasses human approval. Has a working MVP (`producer/src/`,
+  `producer/README.md`).
+- [`visual_planner/`](./visual_planner/) — finalizes each scene's visual
+  requirement and creates `assets/*.md` records via a deterministic
+  Visual Safety Rule (a scene's claim `Classification` drives its visual
+  type and authenticity classification). Never presents generated media
+  as authentic, never invents historical evidence. Has a working MVP
+  (`visual_planner/src/`, `visual_planner/README.md`).
+
+One more has a **contract only, no implementation yet**:
+
 - [`voice/`](./voice/) — narration → voiceover audio, provider-agnostic
   (no vendor named anywhere in the contract). Never alters narration
-  meaning or inserts unsupported claims.
-- [`visual-planner/`](./visual-planner/) — finalizes each scene's visual
-  requirement and creates `assets/*.md` records. Never presents generated
-  media as authentic, never invents historical evidence.
+  meaning or inserts unsupported claims. Phase 7C.
+
+Neither `producer/` nor `visual_planner/` generates or retrieves any
+actual media — both produce structured *requirements* (scenes, visual/
+asset specifications) for later, unbuilt tooling to fulfill.
 
 ## Not yet specified
 
@@ -117,7 +130,7 @@ their logic) plus the same generic pieces from `researcher/src`; it has
 inside the invoked agent's own existing path. No agent requires any other
 to run first or to exist at all.
 
-## The production lifecycle (Phase 7 — schema only)
+## The production lifecycle (Phase 7B — Producer + Visual Planner MVP)
 
 ```
 PRODUCTION_PLANNING → VOICE → VISUAL_PLANNING → ASSET_COLLECTION →
@@ -127,10 +140,31 @@ HUMAN_REVIEW → APPROVED → READY_TO_PUBLISH
 
 Owned by `templates/PRODUCTION.md`, tracked entirely separately from the
 content-review `status` above — no production agent writes to
-`CONTENT_ITEM.md` at all. `producer/` → `voice/` → `visual-planner/` map
-onto the first three states; the rest have neither an agent nor an
+`CONTENT_ITEM.md` at all. `producer/` produces `PRODUCTION_PLANNING`;
+`visual_planner/` consumes it and advances to `ASSET_COLLECTION` once
+every scene has a finalized visual plan — as a Phase 7B interim
+allowance (`agents/voice/CONTRACT.md`'s Preconditions), since
+`agents/voice/` (which would normally own the `VOICE` stage in between)
+has no implementation yet. The rest have neither an agent nor an
 implementation yet. `READY_TO_PUBLISH` is the last state any of this may
 ever reach — actual publishing is a separate, human-driven system, not
-built in this phase or any so far. See
-`content/what-if/wi-20260902-black-death-modern-medicine/PRODUCTION.md`
-for a golden fixture demonstrating the schema against real content.
+built in this phase or any so far.
+
+Both agents share `agents/producer/src/hashing.py`
+(`compute_script_content_hash`) directly rather than duplicating it —
+`visual_planner/` reuses it to re-verify `SCRIPT.md` hasn't changed since
+`producer/` ran, refusing to plan against a stale production. Each has
+its own hard-coded write whitelist (`mutate.py`): `producer/` may only
+create fresh `PRODUCTION.md`/`scenes/scene-<n>.md` files (never
+overwrites an existing one — a changed script makes the plan `stale`
+instead); `visual_planner/` may only update a scene's `Visual type`/
+`Visual description`/`Asset requirement` fields, create
+`assets/asset-<n>.md` files, and update `PRODUCTION.md`'s two rollup
+sections plus `Production status`.
+
+See `content/what-if/wi-20260902-black-death-modern-medicine/PRODUCTION.md`
+for the Phase 7A golden fixture demonstrating the schema against real
+content (hand-built, not agent-generated — that content item's `status`
+is intentionally never `APPROVED`, so neither agent will ever run
+`--apply` against it; see each agent's `tests/test_approval_gate.py` /
+`test_authenticity_classification.py`).

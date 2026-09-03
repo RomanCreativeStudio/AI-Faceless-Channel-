@@ -34,7 +34,7 @@ HUMAN_REVIEW → APPROVED → READY_TO_PUBLISH
 `READY_TO_PUBLISH` is the last state this record or any production agent
 may ever set. Nothing in `templates/PRODUCTION.md`, `SCENE.md`,
 `ASSET.md`, or `VOICE.md`, and no agent under `agents/producer/`,
-`agents/voice/`, or `agents/visual-planner/`, may publish, or move a
+`agents/voice/`, or `agents/visual_planner/`, may publish, or move a
 content item to `PUBLISHED` — that remains outside this entire phase, per
 `CONSTITUTION.md` rule 2. Publishing off the back of `READY_TO_PUBLISH`
 is a separate, human-driven action with its own (not yet built) system.

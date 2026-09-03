@@ -3,7 +3,7 @@
 Validates `templates/PRODUCTION.md`/`SCENE.md`/`ASSET.md`/`VOICE.md`
 against the existing Black Death What If? golden sample, before any
 production agent (`agents/producer/`, `agents/voice/`,
-`agents/visual-planner/`) is implemented. Mirrors the role
+`agents/visual_planner/`) is implemented. Mirrors the role
 `content/.../AUDIT.md` played for the content-item schema in Phase 3 —
 kept as a separate file so that file (part of the existing golden sample)
 stays untouched by this phase, per the task's explicit requirement.

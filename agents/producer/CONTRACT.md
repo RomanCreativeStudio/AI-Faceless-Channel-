@@ -49,12 +49,16 @@ Producer gets to make.
 - Read `CONTENT_ITEM.md`, `SCRIPT.md`, `claims/*.md`
 - Create/update `PRODUCTION.md`'s own fields (Identity, Production
   status, Scene list rollup, Linked records, Notes/history log) and the
-  rollup sections it owns (Visual requirements rollup, Music/audio
+  rollup sections it initializes (Visual requirements rollup, Music/audio
   rollup, Transitions rollup, Asset references rollup) — not the
   sections owned by later stages (Voiceover information beyond linking
   to a not-yet-created voice record, Captions, Thumbnail, Title/
   description, Production QA state, Human review state all start
-  `NOT_STARTED` and are never populated by the Producer)
+  `NOT_STARTED` and are never populated by the Producer). The Producer
+  only ever writes a placeholder into the Visual requirements/Asset
+  references rollups (nothing to roll up yet) — `agents/visual_planner/`
+  is the one that populates them with real content once it exists; see
+  `agents/visual_planner/CONTRACT.md`'s Allowed actions.
 - Create `scenes/scene-<n>.md` files: Scene ID, Order, Duration
   (estimated), Narration (verbatim from `SCRIPT.md`), Visual type/
   description (a first-pass proposal — Visual Planner's job to finalize),
@@ -76,7 +80,7 @@ The Producer must **never**:
   work, tracked entirely in `PRODUCTION.md`, is complete)
 - Invent narration text not present in `SCRIPT.md`, or paraphrase it —
   scene narration must be verbatim
-- Assign a final `Visual type`/asset — that's `agents/visual-planner/`'s
+- Assign a final `Visual type`/asset — that's `agents/visual_planner/`'s
   job; the Producer's visual fields are an initial proposal only, always
   subject to revision downstream
 

@@ -5,25 +5,31 @@ Operational architecture for the AI Faceless Channel project. Governed by
 
 ## Current phase
 
-**Phase 6 complete (automated review layer); Phase 7 foundation
-established (production stack contracts).** Four review/coordination
-agents have working, tested implementations, stdlib Python, no
-dependencies: the Research / Fact-Check Agent (`agents/researcher/src/`,
-FACT_CHECK mode only), the Safety Reviewer (`agents/safety/src/`,
-SAFETY_REVIEW only), the Originality Reviewer (`agents/originality/src/`,
-ORIGINALITY_REVIEW only), and the Unified Automated Review Orchestrator
-(`agents/orchestrator/src/`), which runs the three in order and
-aggregates their results — it makes no safety/factual/originality
-judgment of its own; see `agents/orchestrator/CONTRACT.md`. Phase 7 adds
-the production-record schema (`templates/PRODUCTION.md`/`SCENE.md`/
-`ASSET.md`/`VOICE.md`) and three production agent contracts
-(`agents/producer/`, `agents/voice/`, `agents/visual-planner/`) —
-**contracts only, no implementations yet.** Everything else remains
+**Phase 6 complete (automated review layer); Phase 7B complete (Producer
++ Visual Planner MVP).** Six agents have working, tested implementations,
+stdlib Python, no dependencies: the Research / Fact-Check Agent
+(`agents/researcher/src/`, FACT_CHECK mode only), the Safety Reviewer
+(`agents/safety/src/`, SAFETY_REVIEW only), the Originality Reviewer
+(`agents/originality/src/`, ORIGINALITY_REVIEW only), the Unified
+Automated Review Orchestrator (`agents/orchestrator/src/`, which runs the
+three in order and aggregates their results — it makes no
+safety/factual/originality judgment of its own; see
+`agents/orchestrator/CONTRACT.md`), the Producer
+(`agents/producer/src/`, turns an `APPROVED` script into
+`PRODUCTION.md` + `scenes/*.md`, deterministically — no AI creativity
+yet), and the Visual Planner (`agents/visual_planner/src/`, finalizes
+each scene's `Visual type`/`Visual description` and creates
+`assets/*.md` records via the deterministic Visual Safety Rule). Neither
+Producer nor Visual Planner generates or retrieves any actual media —
+see "Production layer" below. `agents/voice/` remains a **contract only,
+no implementation** (Phase 7C). Everything else remains
 documentation/templates only: no RESEARCH-mode live retrieval, no
-editorial/production-QA agents, no media generation, no automation/
+editorial/production-QA agents, no voice/TTS integration, no image/video
+generation or asset retrieval, no FFmpeg/assembly, no automation/
 scheduling, no publishing, no external API integration. Nothing outside
-`agents/researcher/`, `agents/safety/`, `agents/originality/`, and
-`agents/orchestrator/` executes.
+`agents/researcher/`, `agents/safety/`, `agents/originality/`,
+`agents/orchestrator/`, `agents/producer/`, and `agents/visual_planner/`
+executes.
 
 ## Directory structure
 
@@ -65,9 +71,17 @@ scheduling, no publishing, no external API integration. Nothing outside
 │   │   ├── README.md             How to run it, module map, limitations
 │   │   ├── src/                  Runs the three agents in order, aggregates results
 │   │   └── tests/                Unit + integration tests
-│   ├── producer/               Producer (Phase 7 — contract only, no src/)
-│   ├── voice/                   Voice (Phase 7 — contract only, no src/)
-│   └── visual-planner/          Visual Planner (Phase 7 — contract only, no src/)
+│   ├── producer/               Producer
+│   │   ├── CONTRACT.md           Design contract
+│   │   ├── README.md             How to run it, module map, limitations
+│   │   ├── src/                  MVP implementation (Phase 7B)
+│   │   └── tests/                Unit + integration tests
+│   ├── voice/                   Voice (Phase 7C — contract only, no src/)
+│   └── visual_planner/          Visual Planner
+│       ├── CONTRACT.md           Design contract
+│       ├── README.md             How to run it, module map, limitations
+│       ├── src/                  MVP implementation (Phase 7B)
+│       └── tests/                Unit + integration tests
 └── content/                Content pillar folders (structure only, no code)
     ├── business-stories/
     ├── history/
@@ -124,7 +138,7 @@ has a schema (see "Production layer" below) but no implementation.
 approval) and precedes `PUBLISHED`; publishing will never be automated
 per `CONSTITUTION.md` rule 2.
 
-## Production layer (Phase 7 — schema only, no implementation)
+## Production layer (Phase 7B — Producer + Visual Planner MVP)
 
 Once a content item reaches `status = APPROVED`, `templates/PRODUCTION.md`
 defines a **separate, more granular lifecycle** for turning its script
@@ -154,9 +168,16 @@ classified `AUTHENTIC_HISTORICAL_MEDIA` or `GENERATED_RECONSTRUCTION`
 presented as real historical footage. `templates/VOICE.md` is
 provider-agnostic — no TTS/voice vendor is named anywhere in the schema.
 
-Three agent contracts exist for this layer (`agents/producer/`,
-`agents/voice/`, `agents/visual-planner/`) — **none are implemented
-yet**; see "Agent contracts" below.
+`agents/producer/` and `agents/visual_planner/` have working MVPs for the
+first two stages (`PRODUCTION_PLANNING`, then visual planning);
+`agents/voice/` remains a contract only — see "Agent contracts" below.
+Neither MVP generates or retrieves any real media: Producer decomposes an
+approved script into structured scenes with placeholder visual/asset
+fields, and Visual Planner turns those placeholders into a structured,
+explicit visual *requirement* (deterministically classified
+`AUTHENTIC_HISTORICAL_MEDIA`/`GENERATED_RECONSTRUCTION`/`NOT_APPLICABLE`)
+— actually sourcing or generating that asset is later, unbuilt tooling
+(`ASSET_COLLECTION`).
 
 ## Agent contracts
 
@@ -189,17 +210,26 @@ how a future orchestrator would run every stage in sequence.
   `--apply` happens through the invoked agent's own existing write path.
   Reuses (never duplicates) each agent's own hashing to skip re-running a
   stage that already has a fresh, unstale `PASS` on file.
-- `agents/producer/CONTRACT.md` — Producer (Phase 7, **not
-  implemented**): turns an `APPROVED` script into `PRODUCTION.md` +
-  `scenes/*.md`. Requires content `status = APPROVED`; never writes to
-  `CONTENT_ITEM.md`, changes a claim, or bypasses human approval.
-- `agents/voice/CONTRACT.md` — Voice (Phase 7, **not implemented**):
+- `agents/producer/CONTRACT.md` — Producer (Phase 7B). Has a working MVP
+  (`agents/producer/src/`): turns an `APPROVED` script into
+  `PRODUCTION.md` + `scenes/*.md`, deterministically (word-count/WPM
+  duration, verbatim narration, no invented content). Requires content
+  `status = APPROVED`; refuses (structured `blocked` result, no
+  mutation) rather than bypassing. Never writes to `CONTENT_ITEM.md`,
+  changes a claim, or bypasses human approval. A changed `SCRIPT.md`
+  after production makes the plan `stale` — refuses to silently
+  regenerate rather than overwriting production history.
+- `agents/voice/CONTRACT.md` — Voice (Phase 7C, **not implemented**):
   narration → voiceover audio, provider-agnostic. Never alters narration
   meaning or inserts unsupported claims.
-- `agents/visual-planner/CONTRACT.md` — Visual Planner (Phase 7, **not
-  implemented**): finalizes each scene's visual requirement and creates
-  `assets/*.md` records. Never presents generated media as authentic,
-  never invents historical evidence beyond what claims establish.
+- `agents/visual_planner/CONTRACT.md` — Visual Planner (Phase 7B). Has a
+  working MVP (`agents/visual_planner/src/`): finalizes each scene's
+  visual requirement and creates `assets/*.md` records via the
+  deterministic Visual Safety Rule (claim `Classification` -> visual
+  type/authenticity — see `agents/visual_planner/README.md`). Never
+  presents generated media as authentic, never invents historical
+  evidence beyond what claims establish; blocks (never guesses) if a
+  scene's claim provenance is missing.
 
 All agents: never run unless explicitly invoked (no scheduling, no
 triggers); `--apply` is opt-in, a dry run is the default; never touch
@@ -207,7 +237,7 @@ triggers); `--apply` is opt-in, a dry run is the default; never touch
 
 ## Out of scope for this phase
 
-- No dependency installation (all four MVPs are stdlib Python only), no
+- No dependency installation (all six MVPs are stdlib Python only), no
   frameworks.
 - No automation or scheduling — agents only run when explicitly invoked
   by a human.
@@ -218,10 +248,16 @@ triggers); `--apply` is opt-in, a dry run is the default; never touch
   and reference material.
 - No editorial/production-QA agents yet, so the orchestrator only
   coordinates the three stages that exist.
-- No production agent implementations yet (`producer`/`voice`/
-  `visual-planner` are contracts only) — no media generation frameworks,
-  no TTS integration, no image/video generation integration, no
-  stock-media crawler, no FFmpeg/assembly infrastructure.
+- No voice/TTS implementation yet (`agents/voice/` is a contract only —
+  Phase 7C) — Producer's `Voiceover information` fields stay
+  `NOT_STARTED`/placeholder.
+- No actual media generation or retrieval — `agents/producer/` and
+  `agents/visual_planner/` produce structured *requirements* only
+  (scenes, visual/asset specifications); no TTS integration, no
+  image/video generation integration, no stock-media crawler, no
+  FFmpeg/assembly infrastructure. `ASSET_COLLECTION` and beyond in
+  `templates/PRODUCTION.md`'s `Production status` sequence remain
+  unbuilt.
 - No external API integration (e.g. YouTube), no analytics, no learning
   engine.
 - No production or publishing pipeline. Reaching

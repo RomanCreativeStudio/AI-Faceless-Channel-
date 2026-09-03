@@ -24,7 +24,26 @@ specifies the requirement precisely enough for that tooling to act on.
 
 Only runs against a `PRODUCTION.md` whose `Production status` is
 `VISUAL_PLANNING` (reached after `agents/voice/` completes `VOICE` with
-`QA status = PASS`).
+`QA status = PASS`) — **or, as an explicitly-labeled Phase 7B interim
+allowance, `PRODUCTION_PLANNING`.** `agents/voice/` has no implementation
+yet (Phase 7C), so requiring literal `VISUAL_PLANNING` would make this
+agent permanently unrunnable until then. Running against
+`PRODUCTION_PLANNING` is not a silent skip of the Voice stage — any
+result produced this way must say plainly that Voice has not run. Once
+`agents/voice/` exists and can advance `Production status` to
+`VISUAL_PLANNING` itself, this interim allowance should be removed rather
+than left as a permanent second entry point.
+
+**Defense-in-depth, found during implementation:** `Production status`
+alone can't distinguish a real, approved production from a hand-built
+schema-validation fixture whose `PRODUCTION.md` happens to carry a
+matching status/hash — exactly the situation of the Phase 7A golden
+`PRODUCTION.md` fixture, whose `CONTENT_ITEM.md` status is `SCRIPT`,
+never `APPROVED`. So when `CONTENT_ITEM.md` is present alongside
+`PRODUCTION.md`, this agent also requires its `status` to be `APPROVED`
+— mirroring `agents/producer/CONTRACT.md`'s own gate — rather than
+relying on the interim allowance alone to keep `--apply` from ever
+running against non-approved (including golden-sample) content.
 
 ## Inputs
 
@@ -49,6 +68,14 @@ Only runs against a `PRODUCTION.md` whose `Production status` is
   `templates/ASSET.md` requires, including an explicit `Historical
   authenticity classification` for every representational asset — never
   left blank, never defaulted
+- Update `PRODUCTION.md`'s `Visual requirements (rollup)` and `Asset
+  references (rollup)` sections once real content exists for them.
+  `agents/producer/CONTRACT.md` creates these sections as placeholders
+  (nothing to roll up yet, since no visual planning has happened) — this
+  agent is the one that actually populates them, which is a refinement of
+  ownership found while implementing both agents, not a conflict: Producer
+  creates the section, Visual Planner is the first agent with real content
+  to put in it.
 - Advance `PRODUCTION.md`'s `Production status` from `VISUAL_PLANNING` to
   `ASSET_COLLECTION` once every scene has a finalized visual plan
 

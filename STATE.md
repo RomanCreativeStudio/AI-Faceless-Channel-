@@ -1,159 +1,192 @@
 # Project State
 
-Last updated: 2026-09-02
+Last updated: 2026-09-03
 
 ## Phase
 
 **Phase 6 — COMPLETE** (unchanged this phase).
-**Phase 7 — Production Stack Foundation — COMPLETE** (contracts only, no
-implementation, per explicit instruction).
+**Phase 7A — Production Stack Foundation — COMPLETE** (unchanged this
+phase; contracts + schema + golden fixture, no implementation).
+**Phase 7B — Producer + Visual Planner MVP — COMPLETE.**
 
-## Completed (Phase 7 foundation)
+## Completed (Phase 7B)
 
-**Step 1 — Inspection:** reviewed `CONSTITUTION.md`, `SYSTEM.md`,
-`STATE.md`, all of `templates/`, `agents/`, the golden sample, and the
-Phase 5/6 review/orchestrator architecture before writing anything.
-Identified what production needs from an approved script: verbatim
-narration per beat, claim references (to keep production traceable back
-to fact-checked content), and an explicit separation from both the
-content-review lifecycle and any publishing authority.
+**Step 1 — Inspection:** re-read `CONSTITUTION.md`, `templates/PRODUCTION.md`/
+`SCENE.md`/`ASSET.md`/`VOICE.md`, `agents/producer/CONTRACT.md`,
+`agents/visual-planner/CONTRACT.md`, the existing Researcher/Safety/
+Originality/Orchestrator implementations, and the Phase 7A golden
+production fixture before writing any code. Found and fixed three
+genuine gaps before implementation started, all documented in place
+rather than silently worked around:
+- `agents/visual-planner/` is an invalid Python package name (hyphens
+  aren't legal in module identifiers) — renamed to `agents/visual_planner/`
+  via `git mv`, then every markdown reference to the old path (9 files)
+  updated via a verified `sed` pass that touched only path/directory
+  references, never the prose name "Visual Planner."
+- The Visual Planner's contract required `Production status =
+  VISUAL_PLANNING`, reachable only after `agents/voice/` (no
+  implementation, Phase 7C) — which would make it permanently unrunnable
+  and contradict this phase's own required Producer→Visual Planner
+  integration test. Fixed with an explicitly-labeled Phase 7B interim
+  allowance permitting `PRODUCTION_PLANNING` too, to be removed once
+  `agents/voice/` exists.
+- Producer's and Visual Planner's contracts both claimed ownership of
+  `PRODUCTION.md`'s Visual requirements/Asset references rollups.
+  Resolved: Producer only initializes them as placeholders; Visual
+  Planner is the one that populates real content — documented in both
+  `CONTRACT.md` files.
 
-**Step 2-5 — Templates** (`templates/`):
-- `PRODUCTION.md` — the production record connecting an approved content
-  item to its assets: identity/script-hash (staleness detection, same
-  pattern as the three review agents' hashing), the
-  `PRODUCTION_PLANNING → ... → READY_TO_PUBLISH` state machine, scene
-  list, voiceover/visual/caption/music/transition/asset rollups,
-  thumbnail, title/description, and its own Production QA + Human review
-  gates (mirrors `templates/VIDEO_QA.md`'s existing final-approval
-  pattern rather than duplicating it). Explicit "Separation from content
-  lifecycle" section.
-- `SCENE.md` — one scene = one record: narration (verbatim, never
-  paraphrased), visual type/description, asset requirement, caption,
-  music, transition, claim references, generation and QA status. "The
-  video is described as data" stated as the design goal up front.
-- `ASSET.md` — provenance-first: `Generated vs. retrieved`,
-  `Licensing/provenance status` (never defaults to "safe"), and a
-  required-when-applicable `Historical authenticity classification`
-  (`AUTHENTIC_HISTORICAL_MEDIA` / `GENERATED_RECONSTRUCTION` /
-  `NOT_APPLICABLE`) with no default value — generated imagery can never
-  be silently presented as real historical footage.
-- `VOICE.md` — provider-agnostic; `Provider`/`Voice configuration` are
-  opaque free-text fields, no vendor named anywhere.
+**Step 2 — Producer MVP** (`agents/producer/src/`):
+- `duration.py` — deterministic `estimate_duration_seconds(text,
+  words_per_minute)`; `words_per_minute` is always an explicit parameter
+  (`run_producer(..., words_per_minute=...)`, CLI `--wpm`) —
+  `DEFAULT_WORDS_PER_MINUTE = 150` is only the fallback.
+- `scene_builder.py` — Hook (if present) becomes scene 1; each
+  `## Narrative beats` numbered item becomes its own scene, in order, no
+  condensation. A beat's trailing `` — claims: `c1`, `c2` `` suffix is
+  parsed for claim references, cross-validated against `claims/*.md`
+  (missing claim → `StructuralFailure`, reused directly from
+  `agents/researcher/src/errors.py` — never invents a claim). No
+  `## Narrative beats` section at all → `NoLoadableContent` (also
+  reused, never researcher's fact-check domain logic).
+- `hashing.py` — `sha256(SCRIPT.md)`, reused directly by Visual Planner.
+- `mutate.py` — hard-coded path whitelist: `PRODUCTION.md` (root) and
+  `scenes/scene-<n>.md` only, and only ever as fresh files.
+- `pipeline.py` (`run_producer(root, apply=False, words_per_minute=150)`)
+  — gates on `CONTENT_ITEM.md` `status == APPROVED` (structured `blocked`
+  result otherwise, no mutation); if `PRODUCTION.md` already exists, a
+  matching `Script content hash` is a no-op, a mismatched one returns a
+  structured `stale` result and leaves existing files untouched — no
+  versioned supersession built (see "Known limitations").
+- 20 tests (`agents/producer/tests/`), all isolated fixtures, real golden
+  sample confirmed untouched.
 
-**Step 6 — Production agent contracts** (`agents/producer/`,
-`agents/voice/`, `agents/visual-planner/` — `CONTRACT.md` + `README.md`
-each, **no `src/`, not implemented**):
-- Producer: script → `PRODUCTION.md` + scenes. Gated on content
-  `status = APPROVED` (the strictest available gate, not merely
-  automated-review-passed). Never writes to `CONTENT_ITEM.md`, never
-  touches claims/reviews, never bypasses approval, never publishes.
-- Voice: narration → voiceover, provider-agnostic. Never alters narration
-  meaning or inserts unsupported claims.
-- Visual Planner: scenes → finalized visual requirement + `ASSET.md`
-  records. Never presents generated media as authentic, never invents
-  historical evidence beyond what claims establish, never clears
-  provenance itself (that's downstream work).
+**Step 3 — Visual Planner MVP** (`agents/visual_planner/src/`):
+- `classification.py` — the Visual Safety Rule, deterministic from claim
+  `Classification` alone: no claim references → `ON_SCREEN_TEXT_GRAPHIC`/
+  `NOT_APPLICABLE`; all claims `FACT` → `ARCHIVAL_IMAGE`/
+  `AUTHENTIC_HISTORICAL_MEDIA` (sourcing intent only — `Verification
+  status` stays `NOT_STARTED`, mirroring the Phase 7A golden fixture's
+  `asset-02.md` pattern); any `ASSUMPTION`/`INFERENCE`/`SPECULATION` claim
+  → `GENERATED_RECONSTRUCTION` unconditionally, never
+  `AUTHENTIC_HISTORICAL_MEDIA`.
+- `pipeline.py` (`run_visual_planner(root, apply=False)`) — requires
+  `PRODUCTION.md` `Production status` in `{VISUAL_PLANNING,
+  PRODUCTION_PLANNING}` (the interim allowance); re-verifies `SCRIPT.md`'s
+  hash against `PRODUCTION.md`'s stored one (reusing Producer's
+  `hashing.py` directly) and blocks if stale; blocks (never guesses) if a
+  scene cites a claim with no `claims/*.md` file ("missing provenance").
+  **Defense-in-depth found during implementation:** the interim allowance
+  means `Production status` alone can't tell a real approved production
+  apart from a hand-built schema fixture with a matching status/hash —
+  exactly the Phase 7A golden `PRODUCTION.md` fixture's situation (its
+  `CONTENT_ITEM.md` status is `SCRIPT`, never `APPROVED`). Added a second
+  check requiring `CONTENT_ITEM.md`'s own status to be `APPROVED`
+  whenever that file is present, closing the gap rather than relying on
+  the interim allowance alone — documented in `CONTRACT.md`.
+- `mutate.py` — hard-coded whitelist: a scene's `Visual type`/`Visual
+  description`/`Asset requirement` only, new `assets/asset-<n>.md` files,
+  and `PRODUCTION.md`'s two rollup sections + `Production status`
+  (advanced to `ASSET_COLLECTION` once every scene is planned).
+- 18 tests (`agents/visual_planner/tests/`), all isolated fixtures built
+  by running the real Producer first (never hand-rolled), real golden
+  sample confirmed untouched (dry-run only, for the reason below).
 
-**Step 7-8 — State machine + human gate:** defined in `PRODUCTION.md`
-exactly as specified (`PRODUCTION_PLANNING → VOICE → VISUAL_PLANNING →
-ASSET_COLLECTION → ASSEMBLY → CAPTIONS → THUMBNAIL → METADATA →
-PRODUCTION_QA → HUMAN_REVIEW → APPROVED → READY_TO_PUBLISH`).
-`READY_TO_PUBLISH` is the explicit ceiling — no template or contract this
-phase grants publishing authority to anything.
+**Step 4 — Isolated test fixtures:** no committed "TEST FIXTURE — APPROVED"
+file was needed — every test builds its own fresh, isolated, `status =
+APPROVED` content item in a `tempfile.TemporaryDirectory()`
+(`agents/producer/tests/builders.py`, reused by
+`agents/visual_planner/tests/builders.py` via the real `run_producer()`
+call rather than hand-rolled `PRODUCTION.md`/scene files). The real
+golden sample's `status` remains `SCRIPT`, untouched.
 
-**Step 9 — Golden production fixture** (additive only —
-`content/what-if/wi-20260902-black-death-modern-medicine/`):
-`PRODUCTION.md`, `scenes/scene-01.md`–`scene-04.md` (4 scenes, 46s,
-condensed from `SCRIPT.md`'s 6 beats), `assets/asset-01.md`–`asset-03.md`
-(2 `GENERATED_RECONSTRUCTION`, 1 intended `AUTHENTIC_HISTORICAL_MEDIA`),
-`voice/voice-01.md`, and `PRODUCTION_AUDIT.md` (the validation report).
-Zero existing golden-sample files modified — confirmed via `git status`.
+**Step 5 — Documentation:** `agents/producer/README.md`,
+`agents/visual_planner/README.md` (rewritten from Phase 7A's
+"not implemented yet" stubs to describe the real MVP architecture,
+CLI usage, and known limitations), `SYSTEM.md`, `README.md` (root),
+`agents/README.md`, `STATE.md` (this file).
 
-**Step 10 — Documentation:** `SYSTEM.md` (directory structure, new
-"Production layer" section, agent contracts list, out-of-scope list),
-`README.md` (root), `agents/README.md` (production agents +
-"The production lifecycle" section), `STATE.md` (this file).
+## Validation performed
 
-## Validation performed (Step 9 checklist + Final Validation)
+1. `agents/producer/tests/` — 20/20 pass: approved→plan, unapproved→
+   blocked (no mutation), golden sample never modified, script hash
+   recorded, script change→stale (existing files untouched), unchanged
+   script re-run is a no-op, stable/ordered scene IDs, narration
+   preserved verbatim, claim references carried into scenes, What If?
+   classification rollup preserved, deterministic WPM-driven duration,
+   dry-run makes zero mutation, apply writes only `PRODUCTION.md`+
+   `scenes/*.md`, `mutate.py` rejects a non-whitelisted filename, apply
+   never touches `CONTENT_ITEM.md`, malformed script (no Narrative beats)
+   fails safely, missing claim reference fails safely, claims are never
+   invented or altered.
+2. `agents/visual_planner/tests/` — 18/18 pass: every scene gets an
+   explicit classification, `ASSUMPTION`→`GENERATED_RECONSTRUCTION`,
+   all-`FACT`→`AUTHENTIC_HISTORICAL_MEDIA` (intent only, `Verification
+   status` still `NOT_STARTED`), no-claim scene→`NOT_APPLICABLE`,
+   `SPECULATION`→`GENERATED_RECONSTRUCTION`, missing claim provenance
+   blocks rather than guessing, non-`APPROVED` `CONTENT_ITEM.md` blocks
+   even when `PRODUCTION.md`'s own status would otherwise allow it, claim
+   relationship preserved, protected scene fields (identity, narration,
+   caption, status) byte-identical after apply, dry-run makes zero
+   mutation, apply touches only the whitelisted fields/files, narration
+   and claims are never altered, full Producer→Visual Planner
+   integration (5 scenarios: end-to-end plan, valid handoff, consistent
+   script hash, a blocked Producer leaves nothing for the Visual Planner
+   to act on, golden sample untouched end-to-end).
+3. Combined suite — `python3 -m unittest discover -s agents -t . -p
+   "test_*.py"` — **169/169 pass, 0 regressions** (131 pre-existing +
+   20 Producer + 18 Visual Planner). Discovered and fixed a missing
+   top-level `agents/producer/__init__.py` / `agents/visual_planner/__init__.py`
+   during this run (present in every other agent directory; without them
+   `unittest discover` silently skipped both new suites while still
+   reporting success on the rest).
+4. Manual CLI smoke test (`python -m agents.producer.src` /
+   `python -m agents.visual_planner.src`, isolated scratch fixture,
+   deleted after): confirmed the full apply pipeline end-to-end —
+   generated `PRODUCTION.md`, both scene files, and one `ASSET.md`
+   inspected by hand against `templates/` and the Phase 7A golden
+   fixture's shape.
+5. `git status --short` confirms zero modified files under
+   `content/what-if/wi-20260902-black-death-modern-medicine/` — only the
+   pre-existing Phase 7A rename/reference fixes and new `agents/producer/`
+   `agents/visual_planner/` files are present.
+6. No existing reviewer/orchestrator implementation touched this phase —
+   only `agents/producer/CONTRACT.md`, `agents/visual-planner/CONTRACT.md`
+   (Phase 7A contract text, amended pre-implementation per Step 1 above)
+   were edited outside the two new agent directories.
 
-1. Every production field has a clear purpose — confirmed while building
-   the fixture; none unused. See `PRODUCTION_AUDIT.md`.
-2. Scene records can represent a complete video — 4 ordered, timed scenes
-   with narration/visual/caption/music/transition cover all of
-   `SCRIPT.md`'s content.
-3. Scene records can reference claims — all 11 active claims (`c1`-`c4`,
-   `c6`-`c12`; `c5` correctly excluded as superseded, matching
-   `SCRIPT.md`'s own Verified claims table) are covered across the 4
-   scenes.
-4. Assets have provenance — all three fixture assets have honest,
-   unresolved (`UNVERIFIED`/`not yet sourced`) provenance fields; none
-   defaults to a reassuring value it hasn't earned.
-5. Generated historical imagery cannot be confused with authentic media
-   — demonstrated directly: 2 assets `GENERATED_RECONSTRUCTION` (each
-   with a stated "why"), 1 intended `AUTHENTIC_HISTORICAL_MEDIA` with its
-   `Basis for classification` field explicitly flagging that this is
-   intent, not a verified claim yet.
-6. Voice provider is abstracted — `voice-01.md`'s `Provider`/`Voice
-   configuration` are `TBD`, no vendor named anywhere in template or
-   fixture.
-7. Production is separate from content status — `PRODUCTION.md`'s
-   "Separation from content lifecycle" section states it; confirmed in
-   practice, `CONTENT_ITEM.md` untouched.
-8. Human approval remains mandatory — `PRODUCTION.md`'s Human review
-   state is `NOT_STARTED` with an explicit note that `READY_TO_PUBLISH`
-   requires human `APPROVED`, mirroring `templates/VIDEO_QA.md`.
-9. No publishing capability exists — confirmed via grep across every new
-   template and contract; all "publish" mentions are explicit
-   prohibitions or the `READY_TO_PUBLISH` state name.
-10. Existing 131 tests still pass — 43 (Researcher) + 27 (Safety) + 31
-    (Originality) + 30 (Orchestrator), 0 regressions, re-run after every
-    new file was added.
-11. Existing golden sample remains untouched — `git status --short`
-    shows only new (`??`) files under the golden sample's directory,
-    zero modified (`M`) files.
-12. No existing reviewer contracts weakened — no edits to
-    `agents/researcher/`, `agents/safety/`, `agents/originality/`,
-    `agents/orchestrator/`, or any of their templates this phase.
+## Genuine finding, carried over from Phase 7A (still true)
 
-## Genuine finding
-
-Building the fixture surfaced that `SCRIPT.md` (explicitly "a
-representative structure... not a polished script") contains beat-level
-*descriptions* rather than verbatim spoken narration for most beats —
-only the Hook is true spoken-form text. `templates/SCENE.md`'s
-requirement that narration be verbatim is correct; this is a real gap in
-this particular script's current polish, not a template defect, and is
-documented in full in `PRODUCTION_AUDIT.md` rather than silently worked
-around (each scene quotes `SCRIPT.md`'s actual text and flags that it
-isn't final spoken narration yet).
+`SCRIPT.md`'s beats are descriptions, not always verbatim spoken lines —
+Producer faithfully reproduces whatever is in `SCRIPT.md` (that's its
+job), so real production still needs a fully spoken-form script before
+Producer output is voice-ready. Not a Producer defect; see
+`agents/producer/README.md`'s "Known limitations."
 
 ## Known limitations
 
-- No production agent is implemented — `producer/`, `voice/`,
-  `visual-planner/` are contracts only, exactly as instructed.
-- The golden fixture cannot progress past `PRODUCTION_PLANNING` for two
-  honest reasons: no agent exists yet to do the later work, and this
-  content item has not actually reached `status = APPROVED` (Researcher's
-  own findings show `c1` `DISPUTED`/`c11` `UNRESOLVED` — see
-  `PRODUCTION_AUDIT.md`'s "Honesty check").
-- `SCRIPT.md` needs a full verbatim-narration pass before a real Producer
-  run would produce final (not draft-quality) scene narration — see
-  "Genuine finding" above.
-- No media generation, TTS, image/video generation, stock-media
-  crawling, FFmpeg/assembly, or YouTube integration exists — none was
-  built, per explicit instruction.
+- No versioned production supersession (`prod-01`→`prod-02`) — a stale
+  plan is reported and left untouched, but regenerating it after a script
+  change is a human/operator decision this MVP surfaces rather than
+  automates, per "don't build unnecessary infrastructure."
+- Visual Planner assumes exactly one asset per scene, keyed to the
+  scene's order number — a scene needing multiple distinct assets isn't
+  modeled yet.
+- No actual media generation or retrieval exists anywhere — both agents
+  produce structured requirements only. `agents/voice/` (Phase 7C) has no
+  implementation. `ASSET_COLLECTION` and every stage after it in
+  `templates/PRODUCTION.md`'s `Production status` sequence remain
+  unbuilt.
+- No publishing capability exists anywhere in this phase or any prior
+  one — `READY_TO_PUBLISH` remains the ceiling, per `CONSTITUTION.md`
+  rule 2.
 
 ## Next task
 
-**Phase 7 Implementation** (per the roadmap): build the Producer +
-Visual Planner MVP against `agents/producer/CONTRACT.md` and
-`agents/visual-planner/CONTRACT.md`, and create the first
-machine-readable production plan from the golden sample — following the
-same architecture pattern as the three review agents (stdlib only, dry
-run by default, whitelisted field writes, immutable/sequential records).
-Not full video rendering yet. Given this content item hasn't reached
-`APPROVED`, the first real Producer run will need either a different,
-genuinely-approved test fixture or an explicit test-only bypass of the
-`APPROVED` precondition clearly marked as such — a decision worth
-surfacing to the human owner rather than assumed.
+**Phase 7C — Voice + Asset Generation**: implement `agents/voice/`
+(narration → voiceover audio, provider-agnostic — no vendor named in the
+schema or contract) and real asset generation/retrieval for the
+`ASSET_COLLECTION` stage, against the requirements
+`agents/visual_planner/` now produces. Still no video rendering, no
+captions rendering, no thumbnail generation, and no publishing — those
+remain later, unbuilt stages. Not started yet.
