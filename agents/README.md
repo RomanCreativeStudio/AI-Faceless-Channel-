@@ -29,10 +29,9 @@ override it. No agent has publishing authority, ever, at any stage.
   `orchestrator/CONTRACT.md`'s "Important distinction." Has a working
   MVP (`orchestrator/src/`, `orchestrator/README.md`).
 
-Two more have **working MVPs** (Phase 7B) — the start of the production
-stack, which begins once a content item reaches `status = APPROVED` and
-is a separate lifecycle from everything above (see
-`templates/PRODUCTION.md`):
+Three more have **working MVPs** (Phase 7B/7C-1) — the production stack,
+which begins once a content item reaches `status = APPROVED` and is a
+separate lifecycle from everything above (see `templates/PRODUCTION.md`):
 
 - [`producer/`](./producer/) — turns an approved script into
   `PRODUCTION.md` + `scenes/*.md`, deterministically (word-count/WPM
@@ -40,6 +39,13 @@ is a separate lifecycle from everything above (see
   content). Never writes to `CONTENT_ITEM.md`, changes a claim, or
   bypasses human approval. Has a working MVP (`producer/src/`,
   `producer/README.md`).
+- [`voice/`](./voice/) — converts a production's narration into a
+  voiceover-audio record, via a provider-agnostic `VoiceProvider` adapter
+  interface (no vendor named anywhere in the contract or code). This
+  phase's only implementation is a deterministic local test provider —
+  its output is always labeled `TEST / PLACEHOLDER AUDIO`, never real
+  speech. Never alters narration meaning or inserts unsupported claims.
+  Has a working MVP (`voice/src/`, `voice/README.md`).
 - [`visual_planner/`](./visual_planner/) — finalizes each scene's visual
   requirement and creates `assets/*.md` records via a deterministic
   Visual Safety Rule (a scene's claim `Classification` drives its visual
@@ -47,15 +53,11 @@ is a separate lifecycle from everything above (see
   as authentic, never invents historical evidence. Has a working MVP
   (`visual_planner/src/`, `visual_planner/README.md`).
 
-One more has a **contract only, no implementation yet**:
-
-- [`voice/`](./voice/) — narration → voiceover audio, provider-agnostic
-  (no vendor named anywhere in the contract). Never alters narration
-  meaning or inserts unsupported claims. Phase 7C.
-
-Neither `producer/` nor `visual_planner/` generates or retrieves any
-actual media — both produce structured *requirements* (scenes, visual/
-asset specifications) for later, unbuilt tooling to fulfill.
+None of `producer/`, `voice/`, or `visual_planner/` generates or
+retrieves any *real* media — all three produce structured
+*requirements*/*records* (scenes, a voice record referencing a
+placeholder audio artifact, visual/asset specifications) for later,
+unbuilt tooling (or a real TTS provider) to fulfill.
 
 ## Not yet specified
 
@@ -130,7 +132,7 @@ their logic) plus the same generic pieces from `researcher/src`; it has
 inside the invoked agent's own existing path. No agent requires any other
 to run first or to exist at all.
 
-## The production lifecycle (Phase 7B — Producer + Visual Planner MVP)
+## The production lifecycle (Phase 7C-1 — Producer + Voice + Visual Planner MVP)
 
 ```
 PRODUCTION_PLANNING → VOICE → VISUAL_PLANNING → ASSET_COLLECTION →
@@ -141,23 +143,37 @@ HUMAN_REVIEW → APPROVED → READY_TO_PUBLISH
 Owned by `templates/PRODUCTION.md`, tracked entirely separately from the
 content-review `status` above — no production agent writes to
 `CONTENT_ITEM.md` at all. `producer/` produces `PRODUCTION_PLANNING`;
-`visual_planner/` consumes it and advances to `ASSET_COLLECTION` once
-every scene has a finalized visual plan — as a Phase 7B interim
-allowance (`agents/voice/CONTRACT.md`'s Preconditions), since
-`agents/voice/` (which would normally own the `VOICE` stage in between)
-has no implementation yet. The rest have neither an agent nor an
-implementation yet. `READY_TO_PUBLISH` is the last state any of this may
-ever reach — actual publishing is a separate, human-driven system, not
-built in this phase or any so far.
+`voice/` runs directly against `PRODUCTION_PLANNING` (it *is* the agent
+that owns the `VOICE` stage, so it needs no separate hand-off state to
+wait for — see `agents/voice/CONTRACT.md`'s Preconditions for why
+requiring a literal `Production status = VOICE` would have been
+unreachable) and is itself the one that advances status to
+`VISUAL_PLANNING`, but only once its own `QA status` is `PASS`;
+`visual_planner/` consumes that and advances to `ASSET_COLLECTION` once
+every scene has a finalized visual plan. Visual Planner's own Phase 7B
+interim allowance (also accepting `PRODUCTION_PLANNING`, not just
+`VISUAL_PLANNING`) still exists in code — unneeded on the real path now
+that `voice/` genuinely sets `VISUAL_PLANNING`, but left in place rather
+than touched this phase (out of Phase 7C-1's stated scope); see
+`STATE.md`'s Known limitations. The rest of the sequence has neither an
+agent nor an implementation yet. `READY_TO_PUBLISH` is the last state any
+of this may ever reach — actual publishing is a separate, human-driven
+system, not built in this phase or any so far.
 
-Both agents share `agents/producer/src/hashing.py`
+All three agents share `agents/producer/src/hashing.py`
 (`compute_script_content_hash`) directly rather than duplicating it —
-`visual_planner/` reuses it to re-verify `SCRIPT.md` hasn't changed since
-`producer/` ran, refusing to plan against a stale production. Each has
-its own hard-coded write whitelist (`mutate.py`): `producer/` may only
-create fresh `PRODUCTION.md`/`scenes/scene-<n>.md` files (never
-overwrites an existing one — a changed script makes the plan `stale`
-instead); `visual_planner/` may only update a scene's `Visual type`/
+`voice/` and `visual_planner/` each reuse it to re-verify `SCRIPT.md`
+hasn't changed since `producer/` ran, refusing to act on a stale
+production. `voice/` also reuses `visual_planner/src/loader.load_scenes`
+directly (generic scene-file reading, not visual-planning domain logic)
+rather than re-parsing scene files a third time. Each agent has its own
+hard-coded write whitelist (`mutate.py`): `producer/` may only create
+fresh `PRODUCTION.md`/`scenes/scene-<n>.md` files (never overwrites an
+existing one — a changed script makes the plan `stale` instead); `voice/`
+may only create fresh `voice/voice-<n>.md`/`voice-<n>.audio.txt` files
+(same never-overwrite rule) and update `PRODUCTION.md`'s `Voiceover
+information` section plus (only once its own QA passes) `Production
+status`; `visual_planner/` may only update a scene's `Visual type`/
 `Visual description`/`Asset requirement` fields, create
 `assets/asset-<n>.md` files, and update `PRODUCTION.md`'s two rollup
 sections plus `Production status`.

@@ -5,8 +5,8 @@ Operational architecture for the AI Faceless Channel project. Governed by
 
 ## Current phase
 
-**Phase 6 complete (automated review layer); Phase 7B complete (Producer
-+ Visual Planner MVP).** Six agents have working, tested implementations,
+**Phase 6 complete (automated review layer); Phase 7C-1 complete (Voice
+Generation MVP).** Seven agents have working, tested implementations,
 stdlib Python, no dependencies: the Research / Fact-Check Agent
 (`agents/researcher/src/`, FACT_CHECK mode only), the Safety Reviewer
 (`agents/safety/src/`, SAFETY_REVIEW only), the Originality Reviewer
@@ -17,19 +17,22 @@ safety/factual/originality judgment of its own; see
 `agents/orchestrator/CONTRACT.md`), the Producer
 (`agents/producer/src/`, turns an `APPROVED` script into
 `PRODUCTION.md` + `scenes/*.md`, deterministically — no AI creativity
-yet), and the Visual Planner (`agents/visual_planner/src/`, finalizes
-each scene's `Visual type`/`Visual description` and creates
-`assets/*.md` records via the deterministic Visual Safety Rule). Neither
-Producer nor Visual Planner generates or retrieves any actual media —
-see "Production layer" below. `agents/voice/` remains a **contract only,
-no implementation** (Phase 7C). Everything else remains
-documentation/templates only: no RESEARCH-mode live retrieval, no
-editorial/production-QA agents, no voice/TTS integration, no image/video
-generation or asset retrieval, no FFmpeg/assembly, no automation/
-scheduling, no publishing, no external API integration. Nothing outside
-`agents/researcher/`, `agents/safety/`, `agents/originality/`,
-`agents/orchestrator/`, `agents/producer/`, and `agents/visual_planner/`
-executes.
+yet), the Visual Planner (`agents/visual_planner/src/`, finalizes each
+scene's `Visual type`/`Visual description` and creates `assets/*.md`
+records via the deterministic Visual Safety Rule), and the Voice agent
+(`agents/voice/src/`, converts a production's narration into a
+voiceover-audio record via a provider-agnostic adapter interface — this
+phase's only implementation, `LocalTestVoiceProvider`, produces a
+deterministic, clearly-labeled `TEST / PLACEHOLDER AUDIO` artifact, never
+real speech). None of Producer, Visual Planner, or Voice generates or
+retrieves any *real* media — see "Production layer" below. Everything
+else remains documentation/templates only: no RESEARCH-mode live
+retrieval, no editorial/production-QA agents, no real TTS integration, no
+image/video generation or asset retrieval, no FFmpeg/assembly, no
+automation/scheduling, no publishing, no external API integration.
+Nothing outside `agents/researcher/`, `agents/safety/`,
+`agents/originality/`, `agents/orchestrator/`, `agents/producer/`,
+`agents/visual_planner/`, and `agents/voice/` executes.
 
 ## Directory structure
 
@@ -76,7 +79,11 @@ executes.
 │   │   ├── README.md             How to run it, module map, limitations
 │   │   ├── src/                  MVP implementation (Phase 7B)
 │   │   └── tests/                Unit + integration tests
-│   ├── voice/                   Voice (Phase 7C — contract only, no src/)
+│   ├── voice/                   Voice
+│   │   ├── CONTRACT.md           Design contract
+│   │   ├── README.md             How to run it, module map, limitations
+│   │   ├── src/                  MVP implementation (Phase 7C-1)
+│   │   └── tests/                Unit + integration tests
 │   └── visual_planner/          Visual Planner
 │       ├── CONTRACT.md           Design contract
 │       ├── README.md             How to run it, module map, limitations
@@ -138,7 +145,7 @@ has a schema (see "Production layer" below) but no implementation.
 approval) and precedes `PUBLISHED`; publishing will never be automated
 per `CONSTITUTION.md` rule 2.
 
-## Production layer (Phase 7B — Producer + Visual Planner MVP)
+## Production layer (Phase 7C-1 — Producer + Voice + Visual Planner MVP)
 
 Once a content item reaches `status = APPROVED`, `templates/PRODUCTION.md`
 defines a **separate, more granular lifecycle** for turning its script
@@ -168,16 +175,19 @@ classified `AUTHENTIC_HISTORICAL_MEDIA` or `GENERATED_RECONSTRUCTION`
 presented as real historical footage. `templates/VOICE.md` is
 provider-agnostic — no TTS/voice vendor is named anywhere in the schema.
 
-`agents/producer/` and `agents/visual_planner/` have working MVPs for the
-first two stages (`PRODUCTION_PLANNING`, then visual planning);
-`agents/voice/` remains a contract only — see "Agent contracts" below.
-Neither MVP generates or retrieves any real media: Producer decomposes an
-approved script into structured scenes with placeholder visual/asset
-fields, and Visual Planner turns those placeholders into a structured,
-explicit visual *requirement* (deterministically classified
+`agents/producer/`, `agents/voice/`, and `agents/visual_planner/` all now
+have working MVPs, covering `PRODUCTION_PLANNING` through visual
+planning — see "Agent contracts" below. None generates or retrieves any
+*real* media: Producer decomposes an approved script into structured
+scenes with placeholder visual/asset fields; Voice converts that
+narration into a voiceover-*record* via a provider-agnostic adapter
+interface whose only implementation this phase produces a deterministic,
+clearly-labeled placeholder artifact (not real speech); Visual Planner
+turns the placeholder visual fields into a structured, explicit visual
+*requirement* (deterministically classified
 `AUTHENTIC_HISTORICAL_MEDIA`/`GENERATED_RECONSTRUCTION`/`NOT_APPLICABLE`)
-— actually sourcing or generating that asset is later, unbuilt tooling
-(`ASSET_COLLECTION`).
+— actually synthesizing real speech, or sourcing/generating a real asset,
+is later, unbuilt tooling (`ASSET_COLLECTION` and a real TTS provider).
 
 ## Agent contracts
 
@@ -219,9 +229,15 @@ how a future orchestrator would run every stage in sequence.
   changes a claim, or bypasses human approval. A changed `SCRIPT.md`
   after production makes the plan `stale` — refuses to silently
   regenerate rather than overwriting production history.
-- `agents/voice/CONTRACT.md` — Voice (Phase 7C, **not implemented**):
-  narration → voiceover audio, provider-agnostic. Never alters narration
-  meaning or inserts unsupported claims.
+- `agents/voice/CONTRACT.md` — Voice (Phase 7C-1). Has a working MVP
+  (`agents/voice/src/`): narration → voiceover-audio record, via a
+  provider-agnostic `VoiceProvider` adapter interface (this phase's only
+  implementation, `LocalTestVoiceProvider`, produces a deterministic
+  placeholder, always labeled `TEST / PLACEHOLDER AUDIO`, never real
+  speech). Requires content `status = APPROVED` (checked independently of
+  `PRODUCTION.md`); never alters narration meaning or inserts unsupported
+  claims. A changed `SCRIPT.md` after generation makes the voice result
+  `stale` — refuses to silently reuse or regenerate it.
 - `agents/visual_planner/CONTRACT.md` — Visual Planner (Phase 7B). Has a
   working MVP (`agents/visual_planner/src/`): finalizes each scene's
   visual requirement and creates `assets/*.md` records via the
@@ -237,7 +253,7 @@ triggers); `--apply` is opt-in, a dry run is the default; never touch
 
 ## Out of scope for this phase
 
-- No dependency installation (all six MVPs are stdlib Python only), no
+- No dependency installation (all seven MVPs are stdlib Python only), no
   frameworks.
 - No automation or scheduling — agents only run when explicitly invoked
   by a human.
@@ -248,16 +264,18 @@ triggers); `--apply` is opt-in, a dry run is the default; never touch
   and reference material.
 - No editorial/production-QA agents yet, so the orchestrator only
   coordinates the three stages that exist.
-- No voice/TTS implementation yet (`agents/voice/` is a contract only —
-  Phase 7C) — Producer's `Voiceover information` fields stay
-  `NOT_STARTED`/placeholder.
-- No actual media generation or retrieval — `agents/producer/` and
-  `agents/visual_planner/` produce structured *requirements* only
-  (scenes, visual/asset specifications); no TTS integration, no
-  image/video generation integration, no stock-media crawler, no
-  FFmpeg/assembly infrastructure. `ASSET_COLLECTION` and beyond in
-  `templates/PRODUCTION.md`'s `Production status` sequence remain
-  unbuilt.
+- No real TTS integration — `agents/voice/`'s only provider
+  (`LocalTestVoiceProvider`) produces a deterministic, clearly-labeled
+  placeholder text artifact, never real speech; no vendor is named
+  anywhere in the schema or code.
+- No actual media generation or retrieval otherwise — `agents/producer/`,
+  `agents/voice/`, and `agents/visual_planner/` produce structured
+  *requirements*/*records* only (scenes, a voice-record referencing
+  placeholder audio, visual/asset specifications); no real audio
+  synthesis, no image/video generation integration, no stock-media
+  crawler, no FFmpeg/assembly infrastructure. `ASSET_COLLECTION` and
+  beyond in `templates/PRODUCTION.md`'s `Production status` sequence
+  remain unbuilt.
 - No external API integration (e.g. YouTube), no analytics, no learning
   engine.
 - No production or publishing pipeline. Reaching

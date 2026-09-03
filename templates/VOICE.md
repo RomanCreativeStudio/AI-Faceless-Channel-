@@ -17,10 +17,19 @@ an API, a vendor, or a technical integration.
 | Content ID | `<matches CONTENT_ITEM.md>` |
 | Provider | `<abstract label, e.g. "TBD" or a provider name once chosen — this field alone must never be assumed elsewhere in the system>` |
 | Voice configuration | `<voice/style parameters as the provider defines them — opaque to everything outside this record>` |
+| Script content hash | `<sha256 of SCRIPT.md at the time this voice track was generated — same staleness-detection pattern as templates/PRODUCTION.md/REVIEW.md; added Phase 7C-1, see agents/voice/CONTRACT.md's "Schema change" note>` |
 
 ## Narration source
 
 `<the full narration text this track covers, or a pointer to SCRIPT.md's sections/beats in order — must match scene-level "Narration text" fields exactly, never paraphrase>`
+
+This is the **SOURCE NARRATION** — verbatim, never paraphrased. A
+provider may require a separate **PROVIDER-READY NARRATION** (minimal,
+deterministic TTS-compatibility formatting only, e.g. quote/whitespace
+normalization) derived from it; that derived form is not persisted here
+as its own field — see `agents/voice/CONTRACT.md`'s "Narration
+integrity" for the one transformation permitted and why it can never
+change a word, a number, or a hedge phrase.
 
 ## Generated audio
 
