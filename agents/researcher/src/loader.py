@@ -17,12 +17,15 @@ from . import parsing
 from .errors import NoLoadableContent, StructuralFailure
 from .models import (
     Claim,
+    ClaimSupportRelationship,
     Classification,
     ConfidenceLevel,
     ContentBundle,
     ContentItem,
+    DiscoveryStatus,
     FactCheckStatus,
     ResearchEntry,
+    RetrievalVerified,
     ReviewRecord,
     ReviewVerdict,
     ScriptClaimRow,
@@ -103,6 +106,31 @@ def load_research(research_dir: Path) -> dict[str, ResearchEntry]:
             reliability = SourceReliability(reliability_raw)
         except ValueError:
             reliability = SourceReliability.UNVERIFIED
+
+        # Phase 7G additions — defaulted for entries that predate them
+        # (templates/RESEARCH.md); never raise on an older, valid entry.
+        discovery_raw = parsing.first_backtick_token(table.get("Discovery status", ""))
+        try:
+            discovery_status = DiscoveryStatus(discovery_raw) if discovery_raw else DiscoveryStatus.ACCEPTED
+        except ValueError:
+            discovery_status = DiscoveryStatus.ACCEPTED
+        provider_result_id = parsing.strip_single_backticks(table.get("Provider result ID", "")) or "N/A"
+        retrieval_raw = parsing.first_backtick_token(table.get("Retrieval verified", ""))
+        try:
+            retrieval_verified = (
+                RetrievalVerified(retrieval_raw) if retrieval_raw else RetrievalVerified.UNVERIFIED
+            )
+        except ValueError:
+            retrieval_verified = RetrievalVerified.UNVERIFIED
+        support_raw = parsing.first_backtick_token(
+            sections.get("Claim support relationship", ""), "N/A"
+        )
+        try:
+            claim_support = ClaimSupportRelationship(support_raw)
+        except ValueError:
+            claim_support = ClaimSupportRelationship.NOT_APPLICABLE
+        rejection_reason = sections.get("Rejection reason", "").strip() or "N/A"
+
         entries[path.stem] = ResearchEntry(
             path=path,
             content_id=parsing.strip_single_backticks(table.get("Content ID", "")),
@@ -113,6 +141,11 @@ def load_research(research_dir: Path) -> dict[str, ResearchEntry]:
             related_claims=related,
             conflicting_evidence=sections.get("Conflicting evidence", ""),
             raw_text=text,
+            discovery_status=discovery_status,
+            provider_result_id=provider_result_id,
+            retrieval_verified=retrieval_verified,
+            claim_support_relationship=claim_support,
+            rejection_reason=rejection_reason,
         )
     return entries
 

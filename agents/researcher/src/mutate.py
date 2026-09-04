@@ -49,6 +49,32 @@ def write_revision_file(root: Path, filename: str, text: str) -> Path:
     return path
 
 
+_RESEARCH_FILENAME_RE = re.compile(r"^\d+-[a-z0-9][a-z0-9-]*\.md$")
+
+
+def write_research_file(root: Path, filename: str, text: str) -> Path:
+    """Bounded Research Mode's one new write path (Phase 7G — see
+    agents/researcher/CONTRACT.md's "Bounded Research Mode" — "Research
+    authority"). Only `research/<n>-<slug>.md` is permitted, matching the
+    naming convention templates/RESEARCH.md already documents. Never
+    overwrites an existing file — research records are append-only/
+    immutable, exactly like claims/*.md and reviews/*.md (CONTRACT.md
+    Forbidden actions: "Delete or overwrite any existing research/*.md").
+    """
+    if not _RESEARCH_FILENAME_RE.match(filename):
+        raise PermissionError(
+            f"agents/researcher may not write research file {filename!r} — "
+            "only <n>-<slug>.md is permitted"
+        )
+    research_dir = root / "research"
+    research_dir.mkdir(exist_ok=True)
+    path = research_dir / filename
+    if path.exists():
+        raise FileExistsError(f"{path} already exists — research records are append-only")
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
 def _replace_table_field(text: str, field_name: str, new_value: str) -> str:
     pattern = re.compile(
         r"^(\|\s*" + re.escape(field_name) + r"\s*\|\s*).*?(\s*\|\s*)$", re.MULTILINE

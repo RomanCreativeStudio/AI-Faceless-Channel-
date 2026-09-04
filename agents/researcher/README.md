@@ -5,7 +5,9 @@ first agent that actually runs, scoped to **FACT_CHECK only** (structured
 evidence evaluation against existing `research/`/`claims/` records — not
 live web retrieval, and not RESEARCH-mode source collection). Phase 7F
 adds a third mode, **Autonomous Revision** (`src/revision.py`) — see
-below. Stdlib Python only, no dependencies.
+below. Phase 7G adds a fourth, narrow extension of that mode, **Bounded
+Research** (`src/research.py`) — see below. Stdlib Python only, no
+dependencies.
 
 ## Running it
 
@@ -53,6 +55,11 @@ python3 -m unittest discover -s agents/researcher/tests -t .
 | `pipeline.py` | `run_fact_check()` — the one entry point gluing all of the above |
 | `revision.py` | Autonomous Revision Mode (Phase 7F) — see below |
 | `revision_writer.py` | Renders a `REVISION.md`-formatted file |
+| `research_provider.py` | Bounded Research Mode's provider `Protocol` + result dataclasses (Phase 7G) |
+| `source_policy.py` | Deterministic, conservative source-reliability policy (Phase 7G) |
+| `research.py` | Bounded Research Mode's engine — see below |
+| `research_writer.py` | Renders one evaluated source as a `RESEARCH.md`-formatted file |
+| `test_research_provider.py` | Deterministic local/test `ResearchProvider`, no network |
 | `__main__.py` | CLI wrapper |
 
 ## Design decisions worth knowing about
@@ -88,16 +95,20 @@ python3 -m unittest discover -s agents/researcher/tests -t .
   in `CONTENT_ITEM.md`'s Notes/history log containing the literal text
   `HUMAN_REOPEN: <ROLE>`, e.g. `HUMAN_REOPEN: FACT_CHECKER`.
 
-## Swapping in live retrieval (future work, not built here)
+## Swapping in live retrieval (future work, partially built in Phase 7G)
 
 `loader.load_research()` reads local `research/*.md` files — that's the
 whole "source" interface: a directory in, `dict[str, ResearchEntry]` out.
-A future RESEARCH-mode implementation that retrieves sources live would
-write the same `research/*.md` files (per `templates/RESEARCH.md`) via
-whatever retrieval method it uses, and everything downstream (this
-FACT_CHECK evaluator included) keeps working unchanged. No crawler is
-built here — CONTRACT.md's RESEARCH mode (source collection) is not yet
-implemented, only FACT_CHECK mode is.
+Phase 7G's `research_provider.py` now defines exactly that swap point for
+one narrow case (Bounded Research Mode, below): a `ResearchProvider`
+Protocol (`label` + `search(query) -> ResearchProviderResult`) that a real
+web-search/archive-retrieval implementation could satisfy without
+changing `research.py`, `revision.py`, or any model. Only
+`test_research_provider.py`'s `LocalTestResearchProvider` exists today —
+deterministic, no network, results supplied per-claim by a test fixture.
+CONTRACT.md's general RESEARCH mode (open-ended source collection for a
+whole content item, not one claim's evidence gap) is still not
+implemented — Bounded Research Mode is deliberately narrower than that.
 
 ## Autonomous Revision Mode (Phase 7F)
 
@@ -144,6 +155,69 @@ claim's own cited research entry still, correctly, names the
 successor are formally linked — see its own "What this record does NOT
 do" for the approval boundary.
 
+## Bounded Research Mode (Phase 7G)
+
+A fourth, narrow mode, `src/research.py` — see `CONTRACT.md`'s "Bounded
+Research Mode" for the full contract. It extends Autonomous Revision
+Mode's Case C only: when a `FACT` claim's evidence gap can't be closed
+with anything already on disk, this module issues **exactly one** bounded
+query (the claim's own exact text, verbatim — never reworded, never
+broadened) to a `ResearchProvider`, evaluates every result against
+`source_policy.py`'s deterministic, conservative reliability model, and
+either produces one new, genuinely reciprocal `research/*.md` entry that
+Autonomous Revision Mode's *existing, unmodified* Case A machinery then
+turns into a successor claim, or escalates. **This is not general
+autonomous browsing** — no retry, no rewording, no scope expansion,
+exactly one query per claim, one bounded-research pass per revision
+cycle.
+
+```
+FACT-CHECK RESULT (REVISION_REQUIRED)
+  -> REVISION DIAGNOSIS       (revision.diagnose_claim, unchanged)
+  -> EXISTING-EVIDENCE REPAIR (Case A, unchanged — tried first, always wins if it applies)
+  -> BOUNDED RESEARCH         (research.run_bounded_research — only reached on Case C)
+  -> NEW RESEARCH RECORD      (research/<n>-<slug>.md, written for every evaluated source)
+  -> RE-DIAGNOSIS             (the new entry either makes the claim Case A-eligible, or it doesn't)
+  -> PASS / REVISION_REQUIRED / ESCALATE
+```
+
+**Source reliability is deterministic and conservative, never a
+per-domain authority list.** `source_policy.py` caps a source's
+reliability using only structural signals — is retrieval independently
+verified, is a publisher recorded, is a publication date recorded, what
+does the provider itself claim — and can only ever cap a provider's claim
+*down*, never up. A source is never `HIGH` merely because a provider
+returned it labeled that way.
+
+**Full auditability, not just the winners.** `run_bounded_research`
+writes one `research/*.md` entry per evaluated source, accepted *or*
+rejected — every rejected entry records why (`Rejection reason`), and a
+rejected entry's `Related claims` field, even though it names the claim
+it was evaluated for, is never treated as valid Case A reciprocal
+evidence by a later run (`revision.py`'s `_find_reciprocal_uncited_source`
+excludes anything this engine itself marked `REJECTED`).
+
+**Verdicts**: `SUPPORTED` (hands off to Case A's existing
+`create_successor_claim`, unchanged) / `CONTRADICTED` (a contradicting
+source was found — never automatically rewrites, escalates like Case B) /
+`CONFLICT` (accepted sources both support *and* contradict — an explicit
+conflict, never silently resolved by picking one) / `INSUFFICIENT`
+(nothing usable found — escalates, exactly like Case C already did).
+
+```
+python3 -c "from agents.researcher.src.research import run_bounded_research; \
+            from agents.researcher.src.loader import load_bundle; \
+            from pathlib import Path; \
+            b = load_bundle(Path('<content-item-dir>')); \
+            print(run_bounded_research(Path('<content-item-dir>'), b.claims['<short-id>'], reason='manual test', apply=False))"
+```
+
+Or, more commonly, invoked automatically by
+`run_fact_check_with_autonomous_revision`/`run_autonomous_revision`
+whenever a claim diagnoses as Case C — including through
+`agents/full_pipeline/`, which calls that function unmodified (see
+`agents/full_pipeline/README.md`).
+
 ## Known limitations (MVP scope)
 
 - Autonomous Revision Mode only ever acts on `FACT`-classified claims and
@@ -181,3 +255,22 @@ do" for the approval boundary.
   (two sentences). Left as-is deliberately — that's exactly what
   `REVISION_REQUIRED` is for, not something to silently patch while
   implementing the checker that found it.
+- **Bounded Research Mode (Phase 7G) only ever runs for Case C**
+  (`INSUFFICIENT_EVIDENCE`) — a Case B (`CONTRADICTED`) claim never
+  triggers a provider search, even though "search for a tie-breaking
+  source" might sound plausible; doing so would be exactly the
+  silent-pick-a-side behavior `CONFLICT` handling exists to refuse.
+- No real research provider exists yet — `LocalTestResearchProvider` is
+  permanently a deterministic test double (no network, no real
+  retrieval). A real provider is a distinct, deliberate follow-up, not a
+  side effect of building the abstraction it plugs into.
+- `MAX_ACCEPTED_SOURCES_PER_CLAIM` is enforced by rank (highest
+  reliability kept, ties broken by evaluation order) — a source demoted
+  purely for exceeding this limit is otherwise indistinguishable from one
+  that failed reliability/actionability in its own `Rejection reason`
+  text, though the reason string does name the limit specifically.
+- `research_writer.py` always renders `Source type` as `OTHER` — nothing
+  in `ProviderSourceResult` lets this MVP determine
+  `PRIMARY`/`SECONDARY`/`TERTIARY`/`EXPERT_COMMENTARY` without guessing,
+  and guessing here was judged worse than an honest, structurally-correct
+  `OTHER`.

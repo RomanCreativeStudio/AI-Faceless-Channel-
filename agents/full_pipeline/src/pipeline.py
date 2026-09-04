@@ -51,7 +51,7 @@ _REVIEW_OUTCOME_MAP = {
 
 def _attempt_researcher_revision(
     root: Path, apply: bool, review_result, originality_channel_index=None,
-    originality_reference_paths=None,
+    originality_reference_paths=None, research_provider=None,
 ):
     """Invokes agents/researcher/'s Autonomous Revision Mode against the
     FACT_CHECKER attempt agents/orchestrator/ just produced (never
@@ -64,7 +64,7 @@ def _attempt_researcher_revision(
     SAFETY_REVIEW/ORIGINALITY_REVIEW get their turn — never continuing
     downstream with an unresolved factual issue (task section 10).
     """
-    revision_result = run_autonomous_revision(root, apply=apply)
+    revision_result = run_autonomous_revision(root, apply=apply, research_provider=research_provider)
     if revision_result.aborted or revision_result.blocked or not revision_result.produced:
         return None
     if not apply:
@@ -99,6 +99,7 @@ def run_full_pipeline(
     apply: bool = False,
     originality_channel_index=None,
     originality_reference_paths=None,
+    research_provider=None,
 ) -> PipelineResult:
     completed: list[str] = []
     skipped: list[str] = []
@@ -190,6 +191,7 @@ def run_full_pipeline(
         if review_result.first_blocking_stage == "FACT_CHECK":
             revision_outcome = _attempt_researcher_revision(
                 root, apply, review_result, originality_channel_index, originality_reference_paths,
+                research_provider=research_provider,
             )
             if revision_outcome is not None:
                 review_result, review_outcome = revision_outcome

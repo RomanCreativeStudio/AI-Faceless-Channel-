@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-09-03
+Last updated: 2026-09-04
 
 ## Phase
 
@@ -11,7 +11,8 @@ Last updated: 2026-09-03
 **Phase 7C-2 — Asset Generation / Retrieval MVP — COMPLETE** (unchanged).
 **Phase 7D — Video Assembly + Captions + Thumbnail + Production QA — COMPLETE** (unchanged).
 **Phase 7E — Full Pipeline Orchestration + Self-Review Loop — COMPLETE** (unchanged).
-**Phase 7F — Autonomous Revision Engine (Research/Fact-Check) — COMPLETE.**
+**Phase 7F — Autonomous Revision Engine (Research/Fact-Check) — COMPLETE** (unchanged this phase).
+**Phase 7G — Bounded Research Retrieval + Evidence Expansion — COMPLETE.**
 
 ## Completed (Phase 7E)
 
@@ -685,6 +686,200 @@ modules' docstrings.
   can never pass Production QA this phase, no versioned supersession for
   production artifacts, etc.).
 
+## Completed (Phase 7G)
+
+**Bounded Research Retrieval + Evidence Expansion.** Extends Autonomous
+Revision Mode's Case C (`INSUFFICIENT_EVIDENCE`) — the one case Phase 7F
+left as a pure escalation — with one narrow, deterministic, auditable
+research operation, per this phase's own instructions: continue directly
+from the current repo state, no redesign, preserve every existing
+contract/safety boundary/immutable history/human approval gate/full-
+pipeline behavior.
+
+```
+FACT-CHECK RESULT (REVISION_REQUIRED)
+  -> REVISION DIAGNOSIS       (revision.diagnose_claim, unchanged)
+  -> EXISTING-EVIDENCE REPAIR (Case A, unchanged — always tried first)
+  -> BOUNDED RESEARCH         (research.run_bounded_research — Case C only)
+  -> NEW RESEARCH RECORD      (research/<n>-<slug>.md, one per evaluated source)
+  -> RE-DIAGNOSIS             (either now Case A-eligible, or it isn't)
+  -> PASS / REVISION_REQUIRED / ESCALATE
+```
+
+**Files created:**
+- `agents/researcher/src/research_provider.py` — the `ResearchProvider`
+  Protocol + `ResearchQuery`/`ProviderSourceResult`/`ResearchProviderResult`
+  dataclasses (mirrors `agents/voice/src/provider.py`'s established
+  shape). No vendor named or assumed anywhere.
+- `agents/researcher/src/source_policy.py` — deterministic, conservative
+  reliability model (`check_malformed`, `evaluate_source_reliability`).
+  Not a per-domain authority list; caps a provider's claimed reliability
+  down using only structural signals (retrieval independently verified,
+  publisher present, publication date present) — never up.
+- `agents/researcher/src/test_research_provider.py` —
+  `LocalTestResearchProvider` (deterministic, no network) plus factory
+  functions for CONTRACT.md's six required fixture cases (A strong
+  support, B contradiction, C weak/insufficient, D unverified, E
+  malformed, F conflicting pair).
+- `agents/researcher/src/research.py` — the provider-independent engine:
+  `build_research_request`, `evaluate_provider_result`,
+  `_enforce_accepted_source_limit`, `run_bounded_research` (the one entry
+  point), `_apply_outcome`. Hard-coded limits in one place:
+  `MAX_QUERIES_PER_CLAIM=1`, `MAX_PROVIDER_RESULTS_PER_QUERY=5`,
+  `MAX_ACCEPTED_SOURCES_PER_CLAIM=2`, `MAX_RESEARCH_ATTEMPTS_PER_REVISION=1`,
+  `RELIABILITY_THRESHOLD=MEDIUM`. A limit reached always means
+  `ESCALATE_TO_HUMAN`, never "keep searching."
+- `agents/researcher/src/research_writer.py` — renders one evaluated
+  source (accepted *or* rejected) as a `RESEARCH.md`-formatted file.
+- Four new test files (`agents/researcher/tests/test_source_policy.py`,
+  `test_research.py`, `test_research_cycle.py`,
+  `test_research_write_boundary.py`) plus
+  `agents/full_pipeline/tests/test_bounded_research_integration.py` — 55
+  new tests total.
+
+**Files modified:**
+- `templates/RESEARCH.md` — additive only: `Discovery status`, `Provider
+  result ID`, `Retrieval verified` fields, plus `## Claim support
+  relationship` and `## Rejection reason` sections. Pre-Phase-7G entries
+  have no value for these and default safely (`DiscoveryStatus.ACCEPTED`,
+  `RetrievalVerified.UNVERIFIED`, `ClaimSupportRelationship.NOT_APPLICABLE`).
+- `agents/researcher/src/models.py` — three new enums
+  (`DiscoveryStatus`, `RetrievalVerified`, `ClaimSupportRelationship`),
+  five new defaulted `ResearchEntry` fields, and `RevisionCase.RESEARCH_CONFLICT`
+  / `RevisionStatus.ESCALATED_RESEARCH_CONFLICT` — Case F's ("source
+  disagreement") own escalation state, since neither existing
+  `RevisionCase` value fit an *explicit conflict* between accepted
+  sources.
+- `agents/researcher/src/loader.py` — parses the five new fields,
+  defaulting gracefully (try/except) for any file that predates them;
+  verified directly against the real golden sample's existing research
+  entries.
+- `agents/researcher/src/mutate.py` — `write_research_file()`: the one
+  new write path, filename-whitelisted (`^\d+-[a-z0-9][a-z0-9-]*\.md$`),
+  fails closed (`PermissionError`) on any other name, refuses
+  (`FileExistsError`) to overwrite — append-only, matching every other
+  writer in this module exactly.
+- `agents/researcher/src/revision.py` — Case C in the diagnosis loop now
+  calls a new `_diagnose_with_bounded_research` helper before escalating;
+  `run_autonomous_revision`/`run_fact_check_with_autonomous_revision`
+  gained an optional `research_provider` parameter (defaults to `None`
+  -> `research.py`'s own default). **One real, pre-existing safety gap
+  this integration required fixing**: `_find_reciprocal_uncited_source`
+  (Case A's detector) did not previously check a research entry's
+  `Discovery status` at all — since Phase 7G now writes `REJECTED`
+  entries to disk for full auditability, and those entries' `Related
+  claims` field legitimately names the claim they were evaluated for, an
+  unpatched detector would have treated a source this engine itself
+  rejected as valid Case A evidence on a later run. Fixed by excluding
+  `DiscoveryStatus.REJECTED` entries from reciprocal-evidence candidacy;
+  covered by a dedicated test
+  (`RejectedResearchEntryNeverTreatedAsReciprocalTests`).
+- `agents/researcher/CONTRACT.md` — new "Bounded Research Mode" section
+  (full flow, provider abstraction, source policy, limits, evaluation/
+  verdicts, structured research record, MAY/MUST NOT lists, write
+  whitelist, the six test-provider cases, human escalation conditions)
+  plus an added summary bullet.
+- `agents/full_pipeline/src/pipeline.py` — `research_provider` parameter
+  threaded from `run_full_pipeline` through `_attempt_researcher_revision`
+  to `run_autonomous_revision`, unmodified otherwise; the existing call
+  site already invoked the function bounded research now lives inside,
+  so no control-flow change was needed.
+- Documentation: `agents/researcher/README.md`, `agents/full_pipeline/README.md`,
+  `agents/README.md`, `SYSTEM.md`, root `README.md` — all updated to
+  document Bounded Research Mode's scope, provider abstraction, source
+  policy, limits, escalation behavior, provenance guarantees, and why
+  this is not general autonomous browsing.
+
+**Architecture / safety boundaries (unchanged, extended, never
+loosened):**
+- Bounded research is reachable **only** from Case C
+  (`INSUFFICIENT_EVIDENCE`) — Case B (`CONTRADICTED`) never triggers a
+  provider search, proven by a dedicated test tracking every query issued
+  during a mixed-case revision run.
+- Exactly one query per claim, built from the claim's own `Exact claim`
+  text verbatim — never reworded, never broadened.
+- A `SUPPORTED` verdict never creates a claim itself — it only writes a
+  research record and hands off to Case A's *existing, unmodified*
+  `create_successor_claim`. No second, competing claim-creation path
+  exists.
+- A source's reliability can only ever be capped down from a provider's
+  own claim, never up; `retrieval_verified=False` always hard-caps a
+  source at `UNVERIFIED` regardless of any other claimed quality.
+- Every evaluated source — accepted *or* rejected — gets a written
+  `research/*.md` record for full auditability; every rejected source
+  carries a concrete `Rejection reason`, never `"N/A"`.
+- `CONFLICT` (accepted sources both support and contradict) is an
+  explicit, always-escalated verdict — never silently resolved by picking
+  a side.
+- No new retry counter anywhere: bounded research runs at most once per
+  revision cycle by construction (one call, no loop), and that cycle is
+  still governed entirely by the pre-existing two-consecutive-
+  `REVISION_REQUIRED` gate.
+- `REJECT` is still never autonomously reopened — bounded research is
+  only reachable through `run_autonomous_revision`'s existing REJECT
+  check, unchanged.
+- Predecessor claims remain byte-prefix-identical after a bounded-
+  research-driven revision, exactly as Phase 7F already proved for
+  Case A — verified again end-to-end for the bounded-research path
+  specifically.
+- Dry run (`apply=False`) performs full diagnosis and verdict computation
+  but writes zero files anywhere; `apply=True` writes only through
+  `mutate.write_research_file`'s filename whitelist.
+- No import from `agents/safety/`, `agents/originality/`, or any
+  production agent's own module anywhere in `research.py` — verified by
+  an AST-based test, not just documented.
+- Golden sample never mutated — verified via a dedicated dry-run test
+  against the real content item, and via `git status` showing zero
+  `content/` changes after the full test run.
+
+**Tests: 55 new (14 source-policy, 21 research-engine, 9 revision-
+integration, 9 write-boundary/golden-sample, 2 full-pipeline
+integration), all passing. Full repo suite: 446/446 passing (391 baseline
++ 55 new), zero regressions.** Includes real end-to-end fixtures (not
+just helper-function tests): `test_research_cycle.py`'s
+`test_full_re_fact_check_via_run_fact_check_with_autonomous_revision_reaches_pass`
+(attempt 1 `REVISION_REQUIRED` with zero evidence -> bounded research
+finds support -> successor claim -> attempt 2 `PASS`) and
+`test_bounded_research_integration.py`'s two `run_full_pipeline` tests
+(one reaching `PASS` via bounded research with a supporting provider, one
+correctly still escalating with the default no-data provider).
+
+**Known limitations:**
+- No real research provider exists — `LocalTestResearchProvider` is
+  permanently a deterministic, no-network test double. A real provider
+  (a distinct, deliberate follow-up) would satisfy the same `Protocol`
+  unchanged.
+- `MAX_ACCEPTED_SOURCES_PER_CLAIM` enforcement was added during this
+  phase (the constant existed in an early draft of `research.py` but
+  wasn't yet wired into `run_bounded_research`) — caught and fixed before
+  writing tests for it, not left as a silent gap.
+- `research_writer.py` always renders `Source type` as `OTHER` — nothing
+  in `ProviderSourceResult` lets this MVP determine
+  `PRIMARY`/`SECONDARY`/`TERTIARY`/`EXPERT_COMMENTARY` without guessing.
+- Bounded Research Mode only ever helps `FACT`-classified claims in
+  exactly the same way Case A already did — it does not extend autonomous
+  revision to `ASSUMPTION`/`INFERENCE`/`SPECULATION` claims, and it does
+  not help a claim whose problem is wording/classification (still
+  `ATOMICITY_VIOLATION`, still escalates).
+- General RESEARCH mode (open-ended source collection for a whole content
+  item, independent of any single claim's evidence gap) remains
+  unimplemented — Bounded Research Mode is deliberately narrower and was
+  never meant to substitute for it.
+- Inherits every prior phase's own documented limitations unchanged.
+
+**Genuine findings:**
+1. The Case A reciprocal-evidence detector's missing `Discovery status`
+   check, described above under "Files modified" — a real gap this
+   integration surfaced and fixed, not a hypothetical.
+2. `MAX_ACCEPTED_SOURCES_PER_CLAIM` was present as a constant before it
+   was actually enforced — caught while writing the accepted-source-limit
+   test, fixed immediately (`_enforce_accepted_source_limit`), not
+   deferred.
+3. `run_bounded_research`'s original draft accepted an unused `bundle`
+   parameter (a leftover from an earlier design where the request builder
+   consulted the whole `ContentBundle`); removed once nothing in the
+   function actually used it, keeping the signature honest.
+
 ## Next task
 
 No further phase was specified as the "exact next task" by this phase's
@@ -694,9 +889,12 @@ naming the next one. Two natural, not-yet-scoped continuations exist:
 to `agents/safety/`/`agents/originality/` where a genuinely safe,
 narrow, deterministic fix exists for either (none has been identified
 yet — this would need its own careful evidence-rules analysis, not a
-blind copy of this phase's pattern); (2) a RESEARCH-mode implementation
-that would make substantially more `FACT_CHECK` failures genuinely
-fixable by giving this phase's revision engine real new evidence to work
-with, not just already-existing evidence to re-link. Neither is started.
+blind copy of this phase's pattern); (2) a real `ResearchProvider`
+implementation (live web-search/archive retrieval) satisfying the
+`Protocol` Phase 7G just defined — the abstraction now exists and is
+provider-independent, but no real provider has been built, and doing so
+is a distinct, deliberate follow-up with its own authentication/
+rate-limiting/legal-terms-of-use considerations well outside this
+project's current stdlib-only, no-external-API scope. Neither is started.
 Publishing remains permanently human-gated per `CONSTITUTION.md` rule 2,
 regardless of anything built so far.

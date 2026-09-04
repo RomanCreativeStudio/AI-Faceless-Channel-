@@ -13,6 +13,9 @@ has many of these. Store under
 | Publication date | `<YYYY-MM-DD or "unknown">` |
 | Retrieved date | `<YYYY-MM-DD>` |
 | Source reliability | `HIGH` \| `MEDIUM` \| `LOW` \| `UNVERIFIED` |
+| Discovery status | `DISCOVERED` \| `EVALUATED` \| `ACCEPTED` \| `REJECTED` (added Phase 7G — see `agents/researcher/CONTRACT.md`'s "Bounded Research Mode"; existing entries predating Phase 7G have no value here and default to `ACCEPTED`, since their presence on disk already implies acceptance) |
+| Provider result ID | `<the research provider's own identifier for this result, or "N/A" for a human-entered entry>` |
+| Retrieval verified | `YES` \| `NO` \| `UNVERIFIED` — whether this environment could actually confirm the cited URL/reference was retrieved; never `YES` unless independently confirmed, never silently assumed |
 
 ## Relevant evidence
 
@@ -22,9 +25,17 @@ has many of these. Store under
 
 `<list of CLAIM IDs (templates/CLAIM.md) this source supports>`
 
+## Claim support relationship
+
+`<SUPPORTS \| CONTRADICTS \| UNRELATED \| UNVERIFIED — this source's relationship to the specific claim research was performed for; added Phase 7G, "N/A" for entries predating it or not tied to one bounded research request>`
+
 ## Conflicting evidence
 
 `<anything in this source that conflicts with other research entries or claims; "none found" if applicable>`
+
+## Rejection reason
+
+`<why this candidate was rejected, if Discovery status = REJECTED; "N/A" otherwise — added Phase 7G>`
 
 ## Researcher notes
 

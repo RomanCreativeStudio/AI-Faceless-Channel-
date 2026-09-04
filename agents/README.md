@@ -20,7 +20,16 @@ override it. No agent has publishing authority, ever, at any stage.
   stems from an evidence gap that *already-existing, already-recorded*
   research closes — never inventing evidence, never editing an existing
   claim's wording/classification, never autonomously reopening a
-  `REJECT`. See `researcher/CONTRACT.md`'s "Autonomous Revision Mode."
+  `REJECT`. See `researcher/CONTRACT.md`'s "Autonomous Revision Mode." A
+  fourth, narrow mode, **Bounded Research** (Phase 7G,
+  `researcher/src/research.py`), extends that only when no existing
+  evidence can close the gap: exactly one deterministic, bounded query
+  against a pluggable `ResearchProvider`, evaluated by a conservative,
+  never-domain-hardcoded reliability policy — never open-ended browsing,
+  never more than one query per claim, never a claim created directly
+  (a `SUPPORTED` result hands off to the same successor-creation
+  mechanism Case A already uses). See `researcher/CONTRACT.md`'s "Bounded
+  Research Mode."
 - [`safety/`](./safety/) — Safety Reviewer: evaluates `SCRIPT.md` for
   safety/policy risk during `SAFETY_REVIEW`. Has a working MVP
   (`safety/src/`, `safety/README.md`).
@@ -309,7 +318,7 @@ is intentionally never `APPROVED`, so no agent will ever run `--apply`
 against it; see each agent's `tests/test_approval_gate.py` /
 `test_authenticity_classification.py`).
 
-## Full pipeline orchestration (Phase 7E; Autonomous Revision — Phase 7F)
+## Full pipeline orchestration (Phase 7E; Autonomous Revision — Phase 7F; Bounded Research — Phase 7G)
 
 `agents/full_pipeline/` sits one level above everything else on this
 page — it coordinates `agents/orchestrator/` itself alongside the eight
@@ -372,6 +381,22 @@ complete reasoning, and
 `agents/full_pipeline/tests/test_researcher_revision_integration.py` for
 proof that this never bypasses `SAFETY_REVIEW`/`ORIGINALITY_REVIEW` or
 the human approval gate.
+
+**Phase 7G extends the same call, transparently: Bounded Research Mode.**
+When Autonomous Revision Mode's diagnosis is Case C (no existing evidence
+closes the gap at all), it now also attempts one bounded, deterministic
+research query — `researcher/src/research.py`, via a pluggable
+`ResearchProvider` — before escalating. `agents/full_pipeline/` needed no
+control-flow change for this: it already called
+`run_autonomous_revision` unmodified, and that function performs the
+bounded-research attempt internally; the only addition is an optional
+`research_provider` parameter threaded through so a real provider (or a
+test one) can be supplied. See `agents/researcher/CONTRACT.md`'s "Bounded
+Research Mode" and
+`agents/full_pipeline/tests/test_bounded_research_integration.py` for
+proof this still never bypasses `SAFETY_REVIEW`/`ORIGINALITY_REVIEW` or
+the human approval gate, and still correctly stops for a human when
+bounded research finds nothing usable.
 
 **A real idempotency gap, found and fixed during this phase**: since
 `agents/full_pipeline/` calls every production stage on every

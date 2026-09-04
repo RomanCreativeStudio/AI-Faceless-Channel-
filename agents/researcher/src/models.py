@@ -59,6 +59,33 @@ class EvidenceSupport(str, Enum):
     NOT_APPLICABLE = "NOT_APPLICABLE"  # ASSUMPTION claims
 
 
+class DiscoveryStatus(str, Enum):
+    """Phase 7G addition to templates/RESEARCH.md — see
+    agents/researcher/CONTRACT.md's "Bounded Research Mode". Entries
+    predating Phase 7G have no recorded value; the loader defaults them
+    to ACCEPTED, since their mere presence on disk already implies that.
+    """
+
+    DISCOVERED = "DISCOVERED"
+    EVALUATED = "EVALUATED"
+    ACCEPTED = "ACCEPTED"
+    REJECTED = "REJECTED"
+
+
+class RetrievalVerified(str, Enum):
+    YES = "YES"
+    NO = "NO"
+    UNVERIFIED = "UNVERIFIED"
+
+
+class ClaimSupportRelationship(str, Enum):
+    SUPPORTS = "SUPPORTS"
+    CONTRADICTS = "CONTRADICTS"
+    UNRELATED = "UNRELATED"
+    UNVERIFIED = "UNVERIFIED"
+    NOT_APPLICABLE = "N/A"
+
+
 @dataclass
 class ResearchEntry:
     path: Path
@@ -70,6 +97,13 @@ class ResearchEntry:
     related_claims: list[str]  # short claim ids, e.g. "c10"
     conflicting_evidence: str
     raw_text: str = field(repr=False, default="")
+    # Phase 7G additions — all optional/defaulted for entries that
+    # predate this phase (see templates/RESEARCH.md).
+    discovery_status: DiscoveryStatus = DiscoveryStatus.ACCEPTED
+    provider_result_id: str = "N/A"
+    retrieval_verified: RetrievalVerified = RetrievalVerified.UNVERIFIED
+    claim_support_relationship: ClaimSupportRelationship = ClaimSupportRelationship.NOT_APPLICABLE
+    rejection_reason: str = "N/A"
 
 
 @dataclass
@@ -167,6 +201,7 @@ class RevisionCase(str, Enum):
     CONTRADICTED = "CONTRADICTED"  # Case B: existing evidence conflicts, never invent the replacement
     INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"  # Case C: nothing to work with
     ATOMICITY_VIOLATION = "ATOMICITY_VIOLATION"  # would need reworded text — refuses to fabricate wording
+    RESEARCH_CONFLICT = "RESEARCH_CONFLICT"  # Phase 7G "Case F": bounded research found sources that disagree
 
 
 class RevisionStatus(str, Enum):
@@ -174,6 +209,7 @@ class RevisionStatus(str, Enum):
     ESCALATED_INSUFFICIENT_EVIDENCE = "ESCALATED_INSUFFICIENT_EVIDENCE"
     ESCALATED_CONTRADICTORY_EVIDENCE = "ESCALATED_CONTRADICTORY_EVIDENCE"
     ESCALATED_ATOMICITY_VIOLATION = "ESCALATED_ATOMICITY_VIOLATION"
+    ESCALATED_RESEARCH_CONFLICT = "ESCALATED_RESEARCH_CONFLICT"
 
 
 @dataclass

@@ -5,6 +5,9 @@ implements. A narrow component, not a rewrite of the Researcher:
     FACT-CHECK RESULT
       -> REVISION DIAGNOSIS      (diagnose_claim, per claim)
       -> PERMITTED SUCCESSOR CREATION  (create_successor_claim, Case A only)
+      -> BOUNDED RESEARCH        (Case C only — research.run_bounded_research,
+                                   Phase 7G; SUPPORTED hands off to the same
+                                   create_successor_claim above, unmodified)
       -> RE-FACT-CHECK           (run_fact_check_with_autonomous_revision)
       -> PASS / REVISION_REQUIRED / HUMAN ESCALATION
 
@@ -13,25 +16,27 @@ evidence, and multipass logic directly — this module adds no competing
 implementation of any of those. It never touches SCRIPT.md, never edits
 an existing claim's `Exact claim`/`Classification`, and never invents
 evidence: see "Evidence requirements" below for the three cases this
-follows exactly.
+follows exactly, and CONTRACT.md's "Bounded Research Mode" for Case C's
+Phase 7G extension.
 """
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from . import factcheck, mutate
+from . import factcheck, mutate, research
 from .atomicity import check_atomicity
 from .evidence import evaluate_claim
 from .loader import load_claims as _load_claims
 from .hashing import compute_claim_hash
-from .loader import load_bundle, load_reviews
+from .loader import load_bundle, load_research, load_reviews
 from .models import (
     Claim,
     ClaimRevisionOutcome,
     Classification,
     ConfidenceLevel,
     ContentBundle,
+    DiscoveryStatus,
     FactCheckResult,
     FactCheckStatus,
     ResearchEntry,
@@ -44,6 +49,7 @@ from .models import (
 from .multipass import can_run_new_attempt
 from .pipeline import ROLE as FACT_CHECKER_ROLE
 from .pipeline import run_fact_check
+from .research_provider import ResearchProvider
 from .revision_writer import render_revision_markdown
 
 # Claims in these Fact-check statuses (or classifications) are not
@@ -94,6 +100,13 @@ def _find_reciprocal_uncited_source(claim: Claim, bundle: ContentBundle) -> Rese
         if claim.short_id in entry.related_claims
         and key not in cited
         and f"research/{key}.md" not in cited
+        # Phase 7G: a bounded-research entry this engine already rejected
+        # (research.py's Discovery status = REJECTED) is never reciprocal
+        # evidence, no matter what it names in Related claims — only ever
+        # excludes entries this engine itself marked REJECTED; a
+        # pre-Phase-7G/human-authored entry has no recorded status and
+        # defaults to ACCEPTED, so this changes nothing for those.
+        and entry.discovery_status is not DiscoveryStatus.REJECTED
     ]
     if not candidates:
         return None
@@ -294,8 +307,105 @@ def create_successor_claim(
     return outcome
 
 
+def _diagnose_with_bounded_research(
+    root: Path, claim: Claim, bundle: ContentBundle, insufficient_reason: str, apply: bool,
+    research_provider: ResearchProvider | None,
+) -> tuple[ClaimRevisionOutcome, str]:
+    """Case C's one extension (Phase 7G): exactly one Bounded Research Mode
+    pass, then re-diagnosis. Never loops, never retries the query, never
+    creates a claim itself — a SUPPORTED verdict only ever hands off to
+    create_successor_claim's existing, unmodified Case A path. See
+    CONTRACT.md's "Bounded Research Mode" -> "Full revision flow".
+    """
+    research_outcome = research.run_bounded_research(
+        root, claim, reason=insufficient_reason, apply=apply, provider=research_provider,
+    )
+
+    if research_outcome.verdict == "SUPPORTED" and apply:
+        # Reload research from disk so diagnose_claim can see the entry
+        # research.py just wrote — bundle.research was loaded before this
+        # write happened.
+        bundle.research.update(load_research(root / "research"))
+        new_case, new_reason, new_reciprocal = diagnose_claim(claim, bundle)
+        if new_case is RevisionCase.FIXABLE:
+            outcome = create_successor_claim(root, claim, new_reciprocal, apply, bundle)
+            return outcome, (
+                f"{insufficient_reason} — bounded research found supporting evidence "
+                f"({research_outcome.reason}); {new_reason}"
+            )
+        # A SUPPORTED verdict always writes at least one ACCEPTED,
+        # reciprocal entry, so this should not normally happen — but
+        # never assumed; fails closed to escalation rather than guessing.
+        return (
+            ClaimRevisionOutcome(
+                original_short_id=claim.short_id, case=RevisionCase.INSUFFICIENT_EVIDENCE,
+                reason=(
+                    f"{insufficient_reason} — bounded research ran and reported SUPPORTED but "
+                    f"did not produce a mechanically-usable reciprocal source ({new_reason}); "
+                    "escalating rather than guessing"
+                ),
+                original_hash=compute_claim_hash(claim.raw_text),
+            ),
+            f"bounded research ran but produced nothing mechanically usable: {new_reason}",
+        )
+
+    if research_outcome.verdict == "SUPPORTED" and not apply:
+        return (
+            ClaimRevisionOutcome(
+                original_short_id=claim.short_id, case=RevisionCase.INSUFFICIENT_EVIDENCE,
+                reason=(
+                    f"{insufficient_reason} — bounded research (dry run) found supporting "
+                    f"evidence ({research_outcome.reason}); no research record was written "
+                    "(apply=False); re-run with apply=True to create it and retry"
+                ),
+                original_hash=compute_claim_hash(claim.raw_text),
+            ),
+            "bounded research (dry run) found supporting evidence — re-run with apply=True",
+        )
+
+    if research_outcome.verdict == "CONTRADICTED":
+        return (
+            ClaimRevisionOutcome(
+                original_short_id=claim.short_id, case=RevisionCase.CONTRADICTED,
+                reason=(
+                    f"{insufficient_reason} — bounded research found a contradicting source "
+                    f"({research_outcome.reason}); never automatically rewritten"
+                ),
+                original_hash=compute_claim_hash(claim.raw_text),
+            ),
+            f"bounded research found contradicting evidence: {research_outcome.reason}",
+        )
+
+    if research_outcome.verdict == "CONFLICT":
+        return (
+            ClaimRevisionOutcome(
+                original_short_id=claim.short_id, case=RevisionCase.RESEARCH_CONFLICT,
+                reason=(
+                    f"{insufficient_reason} — bounded research found sources that disagree "
+                    f"({research_outcome.reason}); never silently resolved by picking one"
+                ),
+                original_hash=compute_claim_hash(claim.raw_text),
+            ),
+            f"bounded research found conflicting sources: {research_outcome.reason}",
+        )
+
+    # still INSUFFICIENT after the one permitted bounded-research pass
+    return (
+        ClaimRevisionOutcome(
+            original_short_id=claim.short_id, case=RevisionCase.INSUFFICIENT_EVIDENCE,
+            reason=(
+                f"{insufficient_reason} — bounded research also found nothing usable "
+                f"({research_outcome.reason})"
+            ),
+            original_hash=compute_claim_hash(claim.raw_text),
+        ),
+        f"bounded research also inconclusive: {research_outcome.reason}",
+    )
+
+
 def run_autonomous_revision(
     root: Path, apply: bool = False, fact_check_result: FactCheckResult | None = None,
+    research_provider: ResearchProvider | None = None,
 ) -> RevisionResult:
     """Diagnoses the given (or the latest on-disk) FACT_CHECKER
     REVISION_REQUIRED result and creates permitted successor claims where,
@@ -303,6 +413,15 @@ def run_autonomous_revision(
     (Case A). Never called for a REJECT verdict — see CONTRACT.md's
     "Retry limits". Does not itself re-run fact-check; see
     run_fact_check_with_autonomous_revision below for the full cycle.
+
+    A claim diagnosed as Case C (INSUFFICIENT_EVIDENCE) is given exactly
+    one Bounded Research Mode pass (Phase 7G — CONTRACT.md's "Bounded
+    Research Mode") before escalating; `research_provider` is forwarded to
+    `research.run_bounded_research` unchanged (defaults to the local test
+    provider). Case B (CONTRADICTED) is never routed into bounded
+    research — existing contradictory evidence already means "don't
+    invent a replacement" (see CONTRACT.md's "Full revision flow with
+    Bounded Research Mode").
     """
 
     def _empty(**overrides) -> RevisionResult:
@@ -381,6 +500,14 @@ def run_autonomous_revision(
             outcome = create_successor_claim(root, claim, reciprocal, apply, bundle)
             outcomes.append(outcome)
             reasons.append(f"{claim.short_id}: FIXABLE — {reason}")
+        elif case is RevisionCase.INSUFFICIENT_EVIDENCE:
+            outcome, outcome_reason = _diagnose_with_bounded_research(
+                root, claim, bundle, reason, apply, research_provider,
+            )
+            outcomes.append(outcome)
+            reasons.append(f"{claim.short_id}: {outcome.case.value} — {outcome_reason}")
+            if outcome.case is not RevisionCase.FIXABLE:
+                escalate = True
         else:
             escalate = True
             outcomes.append(
@@ -417,6 +544,7 @@ def _write_revision_record(
             RevisionCase.CONTRADICTED: RevisionStatus.ESCALATED_CONTRADICTORY_EVIDENCE,
             RevisionCase.INSUFFICIENT_EVIDENCE: RevisionStatus.ESCALATED_INSUFFICIENT_EVIDENCE,
             RevisionCase.ATOMICITY_VIOLATION: RevisionStatus.ESCALATED_ATOMICITY_VIOLATION,
+            RevisionCase.RESEARCH_CONFLICT: RevisionStatus.ESCALATED_RESEARCH_CONFLICT,
         }[outcome.case]
     )
     revision_id = f"{content_id}-revision-{revision_number}"
@@ -433,7 +561,7 @@ def _write_revision_record(
 
 
 def run_fact_check_with_autonomous_revision(
-    root: Path, apply: bool = False,
+    root: Path, apply: bool = False, research_provider: ResearchProvider | None = None,
 ) -> tuple[FactCheckResult, RevisionResult | None]:
     """The full narrow-component cycle: FACT-CHECK -> (if
     REVISION_REQUIRED) REVISION DIAGNOSIS -> PERMITTED SUCCESSOR CREATION
@@ -453,7 +581,9 @@ def run_fact_check_with_autonomous_revision(
     if first.verdict is not ReviewVerdict.REVISION_REQUIRED or first.blocked:
         return first, None
 
-    revision_result = run_autonomous_revision(root, apply=apply, fact_check_result=first)
+    revision_result = run_autonomous_revision(
+        root, apply=apply, fact_check_result=first, research_provider=research_provider,
+    )
     if revision_result.aborted or revision_result.blocked or not revision_result.produced:
         return first, revision_result
 

@@ -8,13 +8,23 @@ Operational architecture for the AI Faceless Channel project. Governed by
 **Phase 6 complete (automated review layer); Phase 7D complete (Video
 Assembly + Captions + Thumbnail + Production QA); Phase 7E complete (Full
 Pipeline Orchestration + Self-Review Loop); Phase 7F complete (Autonomous
-Revision Engine — Research/Fact-Check).** Thirteen agents have working,
+Revision Engine — Research/Fact-Check); Phase 7G complete (Bounded
+Research Retrieval + Evidence Expansion).** Thirteen agents have working,
 tested implementations, stdlib Python, no dependencies: the Research /
 Fact-Check Agent (`agents/researcher/src/`, FACT_CHECK mode, plus a third,
 narrow **Autonomous Revision Mode** — Phase 7F — that can create a
 corrected successor claim when *already-existing, already-recorded*
 evidence closes a real gap, but never invents evidence, never edits an
-existing claim, and never approves anything), the Safety Reviewer
+existing claim, and never approves anything; and a fourth, narrower
+extension of that same mode, **Bounded Research Mode** — Phase 7G — that,
+only when no existing evidence closes the gap, issues exactly one
+deterministic, bounded research query through a pluggable
+`ResearchProvider`, evaluated by a conservative reliability policy that
+can never treat a source as more reliable than it can structurally
+verify; a `ResearchProvider` never invents a source and a successful
+result still only ever hands off to the same successor-creation mechanism
+Autonomous Revision Mode already uses — this is not general autonomous
+browsing), the Safety Reviewer
 (`agents/safety/src/`, SAFETY_REVIEW only),
 the Originality Reviewer (`agents/originality/src/`, ORIGINALITY_REVIEW
 only), the Unified Automated Review Orchestrator
@@ -62,14 +72,18 @@ will** (Phase 7F's own reason for existing): **automated review** — an AI
 *evaluates* the work and reports a verdict (`FACT_CHECK`,
 `SAFETY_REVIEW`, `ORIGINALITY_REVIEW`, `PRODUCTION_QA`); **autonomous
 revision** — an AI is permitted to *create a controlled successor
-artifact* when doing so is deterministically safe (Phase 7F's one
-instance: a new claim citing already-existing evidence, never editing or
-inventing anything); and **human approval** — a human decides whether the
-content is actually approved, published, or ready to publish
-(`CONSTITUTION.md` rule 1). A `PASS` from any review or revision step
-never means, implies, or advances toward `APPROVED`. No agent conflates
-these three, and no future phase may either without a `CONSTITUTION.md`
-change.
+artifact* when doing so is deterministically safe (Phase 7F's original
+instance: a new claim citing already-existing evidence; Phase 7G's
+narrow extension: the same successor-creation mechanism, now also
+reachable when a bounded, deterministic research query itself produces
+new, independently-evaluated, reciprocally-confirming evidence — still
+never editing or inventing anything, and still not a fourth concept, only
+a new *source* of evidence Case A's existing rule can act on); and
+**human approval** — a human decides whether the content is actually
+approved, published, or ready to publish (`CONSTITUTION.md` rule 1). A
+`PASS` from any review or revision step never means, implies, or advances
+toward `APPROVED`. No agent conflates these three, and no future phase
+may either without a `CONSTITUTION.md` change.
 
 ## Directory structure
 
@@ -81,7 +95,8 @@ change.
 ├── STATE.md               Living project status
 ├── templates/              Content-item schema (see below)
 │   ├── CONTENT_ITEM.md
-│   ├── RESEARCH.md
+│   ├── RESEARCH.md            + Discovery status/Provider result ID/Retrieval verified/
+│   │                            Claim support relationship/Rejection reason (Phase 7G, additive)
 │   ├── CLAIM.md
 │   ├── SCRIPT.md
 │   ├── REVIEW.md
@@ -96,10 +111,11 @@ change.
 │   ├── PRODUCTION_QA.md        Structural readiness verdict (Phase 7D)
 │   └── REVISION.md             Claim revision record — links predecessor + successor (Phase 7F)
 ├── agents/                  Agent contracts + implementations
-│   ├── researcher/            Research / Fact-Check Agent + Autonomous Revision Mode
+│   ├── researcher/            Research / Fact-Check Agent + Autonomous Revision Mode + Bounded Research Mode
 │   │   ├── CONTRACT.md           Design contract
 │   │   ├── README.md             How to run it, module map, limitations
-│   │   ├── src/                  MVP implementation (FACT_CHECK mode, Autonomous Revision Mode — Phase 7F)
+│   │   ├── src/                  MVP implementation (FACT_CHECK mode, Autonomous Revision Mode —
+│   │   │                            Phase 7F, Bounded Research Mode — Phase 7G)
 │   │   └── tests/                Unit + integration tests
 │   ├── safety/                  Safety Reviewer
 │   │   ├── CONTRACT.md           Design contract
@@ -303,15 +319,23 @@ how a future orchestrator would run every stage in sequence.
 
 - `agents/researcher/CONTRACT.md` — Research / Fact-Check Agent (RESEARCH
   and FACT_CHECK stages), plus a third mode, **Autonomous Revision**
-  (Phase 7F). FACT_CHECK and Autonomous Revision both have working MVPs
-  (`agents/researcher/src/`). Touches only `reviews/*.md`, two
-  whitelisted `CONTENT_ITEM.md` fields (`Research state`, `Fact-check
-  state`), and — Autonomous Revision only — new successor
-  `claims/<short-id>.md` files (via the existing, immutable-predecessor
-  `supersede_claim` primitive), `revisions/revision-<n>.md` records, and
-  a successor's own `Fact-check status` field post-verification. Never
+  (Phase 7F), and a fourth, narrower extension of it, **Bounded
+  Research** (Phase 7G). FACT_CHECK, Autonomous Revision, and Bounded
+  Research all have working MVPs (`agents/researcher/src/`). Touches only
+  `reviews/*.md`, two whitelisted `CONTENT_ITEM.md` fields (`Research
+  state`, `Fact-check state`), and — Autonomous Revision only — new
+  successor `claims/<short-id>.md` files (via the existing,
+  immutable-predecessor `supersede_claim` primitive),
+  `revisions/revision-<n>.md` records, a successor's own `Fact-check
+  status` field post-verification, and — Bounded Research only — new
+  `research/<n>-<slug>.md` records (one per evaluated source, accepted
+  or rejected, via a filename-whitelisted, append-only writer). Never
   edits an old claim's wording/classification, never invents evidence,
-  never autonomously reopens a `REJECT`.
+  never invents a source/URL/citation, never autonomously reopens a
+  `REJECT`, and Bounded Research never issues more than one query per
+  claim or creates a claim directly — a `SUPPORTED` result still only
+  ever hands off to Autonomous Revision's own existing successor-creation
+  mechanism.
 - `agents/safety/CONTRACT.md` — Safety Reviewer (SAFETY_REVIEW stage).
   Has a working MVP (`agents/safety/src/`). Touches only `reviews/*.md`
   and one whitelisted `CONTENT_ITEM.md` field (`Safety state`); never
@@ -410,23 +434,25 @@ how a future orchestrator would run every stage in sequence.
   `READY_TO_PUBLISH` remain exclusively human-set; never touches `Human
   review state` or `CONTENT_ITEM.md`'s own `status`.
 - `agents/full_pipeline/CONTRACT.md` — Full Pipeline Orchestrator (Phase
-  7E; extended Phase 7F). Has a working MVP (`agents/full_pipeline/src/`):
-  sequences `agents/orchestrator/`'s own content-review chain, a
-  read-only `CONTENT_APPROVAL_GATE`, then all eight production agents in
-  their real precondition order, stopping at the first stage that doesn't
-  cleanly succeed. Makes no review/production/QA judgment of its own; has
-  no `mutate.py` — every write happens through an invoked agent's own
-  existing path. Invokes each stage at most once per call
-  (`MAX_STAGE_ATTEMPTS = 1`), with one bounded exception (Phase 7F): when
-  `CONTENT_REVIEW` fails specifically at `FACT_CHECK`, it invokes
-  `agents/researcher/`'s Autonomous Revision Mode and, if that produces a
-  real fix, one more `FACT_CHECKER` attempt plus a full content-review
-  re-run — governed entirely by `agents/researcher/`'s own
-  two-consecutive-attempts gate, never a second counter. For every other
-  stage, "self-review" still means safely re-invoking the same call after
-  something changes out of band, relying entirely on each stage's own
-  existing freshness check. Can never report or cause anything beyond
-  `COMPLETE` (`Production status =
+  7E; extended Phase 7F; transparently includes Phase 7G). Has a working
+  MVP (`agents/full_pipeline/src/`): sequences `agents/orchestrator/`'s
+  own content-review chain, a read-only `CONTENT_APPROVAL_GATE`, then all
+  eight production agents in their real precondition order, stopping at
+  the first stage that doesn't cleanly succeed. Makes no review/
+  production/QA judgment of its own; has no `mutate.py` — every write
+  happens through an invoked agent's own existing path. Invokes each
+  stage at most once per call (`MAX_STAGE_ATTEMPTS = 1`), with one
+  bounded exception (Phase 7F, and, within it, Phase 7G's own bounded
+  research attempt on Case C): when `CONTENT_REVIEW` fails specifically
+  at `FACT_CHECK`, it invokes `agents/researcher/`'s Autonomous Revision
+  Mode and, if that produces a real fix — whether from already-existing
+  evidence or from one bounded research query — one more `FACT_CHECKER`
+  attempt plus a full content-review re-run — governed entirely by
+  `agents/researcher/`'s own two-consecutive-attempts gate, never a
+  second counter. For every other stage, "self-review" still means
+  safely re-invoking the same call after something changes out of band,
+  relying entirely on each stage's own existing freshness check. Can
+  never report or cause anything beyond `COMPLETE` (`Production status =
   HUMAN_REVIEW`).
 
 All agents: never run unless explicitly invoked (no scheduling, no
@@ -439,12 +465,22 @@ triggers); `--apply` is opt-in, a dry run is the default; never touch
   frameworks.
 - No automation or scheduling — agents only run when explicitly invoked
   by a human.
-- No RESEARCH-mode implementation (source collection/live retrieval) —
-  FACT_CHECK mode and Autonomous Revision Mode only for the
-  Research/Fact-Check Agent. Autonomous Revision Mode (Phase 7F) is
+- No general RESEARCH-mode implementation (open-ended source collection/
+  live retrieval for a whole content item) — FACT_CHECK mode, Autonomous
+  Revision Mode, and Bounded Research Mode only for the Research/Fact-
+  Check Agent. Autonomous Revision Mode's original Case A (Phase 7F) is
   bounded to what's already on disk — it can never retrieve, and never
   invents, new evidence; it only re-links a claim to an already-existing,
-  already-recorded, reciprocally-confirming research entry.
+  already-recorded, reciprocally-confirming research entry. Bounded
+  Research Mode (Phase 7G) is a narrow, deliberately different thing from
+  general RESEARCH mode: it issues exactly one deterministic query for
+  one claim's own evidence gap, through a pluggable `ResearchProvider`
+  (only a deterministic, no-network `LocalTestResearchProvider` exists
+  today — a real provider is a distinct, deliberate follow-up), never
+  browses, never rewords or broadens the query, and never invents a
+  source/URL/citation — every accepted source traces to an actual
+  provider result, evaluated by a conservative reliability policy that
+  can only ever cap a provider's claimed reliability down, never up.
 - No internet-wide plagiarism/similarity search — the Originality
   Reviewer only compares against explicitly supplied channel metadata
   and reference material.
@@ -497,6 +533,9 @@ triggers); `--apply` is opt-in, a dry run is the default; never touch
   `FACT_CHECK`-level `REVISION_REQUIRED` can trigger one autonomous
   revision-and-recheck cycle, governed entirely by
   `agents/researcher/`'s own existing two-consecutive-attempts gate.
+  Phase 7G adds no new exception or counter to this — bounded research is
+  entirely internal to that same one revision cycle (at most one bounded
+  research pass per cycle, at most one query per claim within it).
 - No true multi-stage rollback — a `CONTENT_ITEM.md status = APPROVED`
   that a human sets is never automatically reverted by a later production
   failure; every downstream staleness/failure is caught and reported, but

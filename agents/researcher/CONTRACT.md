@@ -521,6 +521,254 @@ In addition to every FACT_CHECK-mode condition above:
   reopened).
 - The two-consecutive-`REVISION_REQUIRED` limit is reached on attempt 2.
 
+## Bounded Research Mode
+
+Phase 7G. A fourth, narrow mode — `agents/researcher/src/research.py` —
+that extends Autonomous Revision Mode's Case C (`INSUFFICIENT_EVIDENCE`)
+only. It never replaces existing-evidence repair (Case A always takes
+precedence when it applies) and it is **not general autonomous browsing**:
+it issues exactly one bounded, deterministic query per claim, evaluates
+whatever a provider returns against a conservative, structural reliability
+policy, and either produces one new, genuinely reciprocal `research/*.md`
+entry that Autonomous Revision Mode's existing Case A machinery can then
+act on unchanged, or escalates. It never authors claim text, never invents
+a source, and never creates a claim itself.
+
+### Full revision flow with Bounded Research Mode
+
+```
+FACT-CHECK RESULT (REVISION_REQUIRED)
+  -> REVISION DIAGNOSIS            (revision.diagnose_claim, unchanged)
+  -> EXISTING-EVIDENCE REPAIR      (Case A: revision.create_successor_claim, unchanged)
+  -> BOUNDED RESEARCH              (this mode — only reached when diagnosis is Case C)
+  -> NEW RESEARCH RECORD           (research.py writes research/*.md via mutate.write_research_file)
+  -> RE-DIAGNOSIS                  (the new entry makes the claim newly Case A-eligible, or it doesn't)
+  -> PASS / REVISION_REQUIRED / ESCALATE
+```
+
+Case B (`CONTRADICTED`) is never routed into Bounded Research Mode —
+existing contradictory evidence already means "don't invent a
+replacement," and searching for one more source to break the tie would be
+exactly the silent-pick-a-side behavior this mode refuses to do (see
+"Case F" below). Only Case C (nothing on disk to work with at all) is
+eligible.
+
+### When it runs
+
+Only when `revision.diagnose_claim` returns `RevisionCase.INSUFFICIENT_EVIDENCE`
+for a `FACT` claim, invoked explicitly by the revision engine — never
+automatically scheduled, never invoked directly by `agents/full_pipeline/`.
+
+### Provider abstraction
+
+`research_provider.py` defines the interface — a `ResearchProvider`
+Protocol (`label` + `search(query) -> ResearchProviderResult`) and plain
+dataclasses (`ResearchQuery`, `ProviderSourceResult`,
+`ResearchProviderResult`) — mirroring `agents/voice/src/provider.py` and
+`agents/assets/src/provider.py` exactly. No vendor name, API shape, or
+network call appears anywhere else in this package; `research.py` depends
+only on this Protocol. `test_research_provider.py`'s
+`LocalTestResearchProvider` is the only implementation that exists today —
+deterministic, no network, results supplied per-claim by a test fixture,
+permanently labeled `"TEST / PLACEHOLDER RESEARCH PROVIDER — no real
+retrieval, no network access"`. A real provider is future work; swapping
+one in requires no change to `research.py`, `revision.py`, or any model.
+
+### Bounded research request
+
+`build_research_request(claim, reason)` packages a `ResearchRequest`
+derived entirely from the claim itself: `claim_short_id`, `exact_claim`
+(verbatim, never reworded or broadened into a related topic),
+`classification`, `existing_supporting_sources`,
+`existing_conflicting_note`, `reason`, and the hard limits below. The
+query text `research.py` actually sends a provider is always
+`request.exact_claim`, unchanged — there is no rewriting/paraphrasing step
+anywhere in this module.
+
+### Source policy — deterministic, conservative, never domain-hardcoded
+
+`source_policy.py` is **not** a hard-coded per-domain authority list (no
+"cnn.com is HIGH", no universal hierarchy) — that would pretend every
+domain carries the same authority across every content pillar, which
+isn't true and isn't this MVP's job to adjudicate. It applies the same
+structural-signal-only approach `evidence.py` already uses for ordinary
+fact-check:
+
+1. `check_malformed()` rejects a result outright (before reliability is
+   ever assessed) if its URL/reference, publisher, evidence excerpt, or
+   title is missing or a placeholder token.
+2. `evaluate_source_reliability()` returns `HIGH` / `MEDIUM` / `LOW` /
+   `UNVERIFIED`, capped by structural completeness:
+   - `retrieval_verified = False` hard-caps the result at `UNVERIFIED`,
+     regardless of anything else the provider claims — retrieval that
+     can't be confirmed is never treated as evidence.
+   - `HIGH` requires the provider's own claim to be `HIGH` **and** a
+     publisher **and** a publication date all present.
+   - `MEDIUM` requires a publisher and a provider claim of at least
+     `MEDIUM`.
+   - `LOW` requires only a publisher.
+   - Otherwise `UNVERIFIED`.
+
+   **A source can only ever be capped down from what a provider claims,
+   never up** — a source never becomes `HIGH` merely because a provider
+   returned it labeled that way.
+
+### Research limits — hard-coded in one place (`research.py`)
+
+| Limit | Value |
+|---|---|
+| `MAX_QUERIES_PER_CLAIM` | 1 — exactly the claim's own exact text, verbatim |
+| `MAX_PROVIDER_RESULTS_PER_QUERY` | 5 |
+| `MAX_ACCEPTED_SOURCES_PER_CLAIM` | 2 |
+| `MAX_RESEARCH_ATTEMPTS_PER_REVISION` | 1 — one bounded-research pass per revision cycle |
+| `RELIABILITY_THRESHOLD` | `MEDIUM` — the minimum reliability that can ever close an evidence gap |
+
+Reaching any limit means `ESCALATE_TO_HUMAN` — never "keep searching."
+No new persistent retry counter exists anywhere: bounded research already
+runs at most once per revision cycle, and that cycle is itself already
+bounded by the existing two-consecutive-`REVISION_REQUIRED` gate
+(`multipass.can_run_new_attempt`, unchanged, reused exactly as Autonomous
+Revision Mode already reuses it).
+
+### Evaluation and verdicts
+
+`evaluate_provider_result()` evaluates each returned source independently
+and deterministically: malformed -> `REJECTED`; otherwise assessed for
+reliability and for whether its `claim_support` is *actionable*
+(`SUPPORTS` or `CONTRADICTS` only — `UNRELATED`/`UNVERIFIED` can never
+close or dispute a gap). A source is `ACCEPTED` only if it meets the
+reliability threshold **and** is actionable; otherwise `REJECTED` with a
+recorded reason. `run_bounded_research()` then derives one verdict from
+all accepted sources:
+
+- **`SUPPORTED`** — at least one accepted source supports the claim and
+  none contradict it. `escalate_to_human = False`; the new research entry
+  is ready for Case A's existing evidence-linkage repair to act on.
+- **`CONTRADICTED`** — at least one accepted source contradicts the claim
+  and none support it. Escalates — never automatically rewrites the
+  claim, exactly like Case B.
+- **`CONFLICT`** ("Case F") — accepted sources both support *and*
+  contradict. An explicit conflict state, always escalated — **never
+  silently resolved by picking a side**.
+- **`INSUFFICIENT`** — no accepted source either supports or contradicts
+  (nothing returned, or every candidate was rejected). Escalates rather
+  than manufacture a plausible-sounding but unsupported claim.
+
+### Structured research record
+
+Bounded research writes one `research/<n>-<slug>.md` file **per evaluated
+source, accepted or rejected alike** — full auditability of everything the
+provider returned and how it was judged, not just what was kept. Every
+entry additively uses `templates/RESEARCH.md`'s Phase 7G fields:
+`Discovery status` (`DISCOVERED`/`EVALUATED`/`ACCEPTED`/`REJECTED`),
+`Provider result ID`, `Retrieval verified` (`YES`/`NO`/`UNVERIFIED`,
+never `YES` unless independently confirmed), `Claim support relationship`
+(`SUPPORTS`/`CONTRADICTS`/`UNRELATED`/`UNVERIFIED`), and `Rejection
+reason` (`N/A` for accepted entries). If retrieval can't be guaranteed,
+the entry says so (`Retrieval verified = NO`) rather than assuming it.
+Every rendered field traces back to something `research.py` or
+`source_policy.py` actually determined — `research_writer.py` never fills
+in a value it wasn't given.
+
+### The agent MAY (Bounded Research Mode)
+
+- Issue exactly one bounded query, derived verbatim from a Case
+  C-diagnosed claim's own exact text.
+- Invoke the configured `ResearchProvider` and evaluate every result it
+  returns, up to `MAX_PROVIDER_RESULTS_PER_QUERY`.
+- Create new `research/<n>-<slug>.md` records — for accepted *and*
+  rejected candidates alike — via `mutate.write_research_file`.
+- Accept a source as evidence only when it independently passes
+  `source_policy.py`'s reliability threshold and its `claim_support` is
+  actionable.
+- Hand a `SUPPORTED` outcome's new research entry to Autonomous Revision
+  Mode's existing, unmodified Case A machinery
+  (`revision.create_successor_claim`) — bounded research never creates a
+  claim itself.
+- Issue a new `FACT_CHECKER` review attempt through the existing,
+  unmodified retry machinery once a successor exists.
+- Escalate to a human on any outcome other than a clean `SUPPORTED`.
+
+### The agent MUST NOT (Bounded Research Mode)
+
+- Change a claim's `Exact claim` wording or `Classification`.
+- Silently change, edit, or replace a predecessor claim.
+- Delete or overwrite any existing `research/*.md`, `claims/*.md`,
+  `reviews/*.md`, or `revisions/*.md` file — every write is additive
+  (`mutate.write_research_file` fails closed with `FileExistsError` on any
+  attempted overwrite, and `PermissionError` on any non-whitelisted
+  filename).
+- Change `status`, `Owner approval state`, or any other human-approval
+  field.
+- Publish anything, anywhere, under any condition, or mark anything
+  `APPROVED`/`READY_TO_PUBLISH`.
+- Invent a citation, URL, publisher, quotation, publication date, or
+  excerpt — every field in a written research entry traces back to an
+  actual `ProviderSourceResult` the configured provider returned.
+- Treat an excerpt/snippet as authoritative on its own — reliability is
+  always independently assessed by `source_policy.py`, never trusted
+  because a provider's excerpt sounded convincing.
+- Treat an unverified source as verified, under any circumstance
+  (`retrieval_verified = False` always hard-caps reliability at
+  `UNVERIFIED`).
+- Research indefinitely, retry a failed query, reword a query, or expand
+  scope to a related topic — exactly one query, exactly once per revision
+  cycle.
+- Bypass the existing two-consecutive-`REVISION_REQUIRED` retry gate, or
+  create any second/competing retry counter.
+- Autonomously reopen a `REJECT` verdict — Bounded Research Mode is only
+  ever reached through Autonomous Revision Mode's own Case C path, which
+  already refuses to run against a `REJECT`.
+
+### Research authority — write whitelist
+
+Bounded Research Mode may write **only**:
+
+- New `research/<n>-<slug>.md` files, via `mutate.write_research_file` —
+  filename must match `^\d+-[a-z0-9][a-z0-9-]*\.md$`, fails closed
+  (`PermissionError`) on any other name, and refuses
+  (`FileExistsError`) to overwrite an existing file.
+
+Everything downstream of a `SUPPORTED` verdict (a successor claim, a
+`revisions/*.md` record, a new `FACT_CHECKER` attempt) is written by
+Autonomous Revision Mode's own already-whitelisted writers, unchanged —
+`research.py` never writes a claim, review, or revision file itself. As
+with every other whitelisted writer in this codebase, an attempted write
+outside this list fails closed, not silently.
+
+### Test provider — six required fixture cases
+
+`test_research_provider.py`'s `LocalTestResearchProvider` exists to prove
+this pipeline end-to-end without any real network access, with one
+ready-made factory function per required case:
+
+- **Case A — strong support.** `strong_support_result()`: `HIGH`
+  reliability, verified, `SUPPORTS`. Verdict: `SUPPORTED`.
+- **Case B — contradiction.** `contradiction_result()`: `HIGH`
+  reliability, verified, `CONTRADICTS`. Verdict: `CONTRADICTED`, never an
+  automatic rewrite.
+- **Case C — insufficient/weak.** `weak_irrelevant_result()`: `LOW`
+  claimed reliability, unknown date, `UNRELATED`. Verdict: `INSUFFICIENT`.
+- **Case D — unverified source.** `unverified_source_result()`: otherwise
+  plausible, but `retrieval_verified = False`. Must never become
+  `ACCEPTED` regardless of how convincing the rest of the result looks.
+  Verdict: `INSUFFICIENT`.
+- **Case E — malformed/fabricated result.** `malformed_result()`: empty
+  title/publisher/excerpt, invalid URL. Safely rejected with no mutation
+  to any accepted state. Verdict: `INSUFFICIENT`.
+- **Case F — source disagreement.** `conflicting_pair()`: one `HIGH`
+  reliability source supports, another `HIGH` reliability source
+  contradicts. Verdict: `CONFLICT` — an explicit escalation, never a
+  silent pick of whichever result happened to be evaluated first.
+
+### Human escalation conditions (Bounded Research Mode)
+
+In addition to every Autonomous Revision Mode condition above:
+
+- Bounded research's verdict is `CONTRADICTED`, `CONFLICT`, or still
+  `INSUFFICIENT` after the one permitted query.
+- Any research limit in the table above is reached.
+
 ## What the agent is explicitly NOT allowed to do (summary)
 
 - Invent sources, URLs, quotes, statistics, or evidence
@@ -537,3 +785,8 @@ In addition to every FACT_CHECK-mode condition above:
   invent a replacement claim when evidence only contradicts (never
   establishes) one, autonomously reopen a `REJECT`, or edit `SCRIPT.md`
   — see "Autonomous Revision Mode" above for the complete list
+- (Bounded Research Mode) Research indefinitely or reword/broaden a query,
+  treat an unverified or excerpt-only source as accepted evidence, upgrade
+  a source's reliability beyond what it structurally verifies, silently
+  pick a side when accepted sources conflict, or create a claim directly
+  — see "Bounded Research Mode" above for the complete list

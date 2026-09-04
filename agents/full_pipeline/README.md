@@ -47,6 +47,22 @@ turn. This is still bounded, still not a loop: it is governed entirely by
 `agents/researcher/`'s own existing two-consecutive-attempts gate, not a
 new counter here.
 
+**Phase 7G, transparently included in that same call:** if the evidence
+gap can't be closed with anything already on disk (Case C), Autonomous
+Revision Mode now also attempts one **Bounded Research Mode** pass —
+exactly one query, evaluated against a deterministic, conservative
+reliability policy — before escalating. This orchestrator required no
+control-flow change for this: `_attempt_researcher_revision` already
+called `agents.researcher.src.revision.run_autonomous_revision`
+unmodified, and that function now performs the bounded-research attempt
+internally. The only change here is a new, optional `research_provider`
+parameter threaded from `run_full_pipeline` down to it, so a caller can
+supply a real provider; it defaults to the same deterministic test
+provider `agents/researcher/` itself defaults to. See
+`agents/researcher/CONTRACT.md`'s "Bounded Research Mode" for the full
+contract — this is never general autonomous browsing, and never bypasses
+the human approval gate any more than existing-evidence repair does.
+
 For every other stage, "self-review" still means: **call
 `run_full_pipeline` again, later, after something actually changed** (a
 human edit, a future agent). Every stage's own freshness/precondition
@@ -123,6 +139,15 @@ python3 -m unittest discover -s agents/full_pipeline/tests -t .
   a wording or classification correction, and never anything for
   `SAFETY_REVIEW`/`ORIGINALITY_REVIEW`. See
   `agents/researcher/CONTRACT.md`'s "Autonomous Revision Mode".
+- Bounded Research Mode (Phase 7G) only ever runs when existing-evidence
+  repair (Case A) doesn't apply — never for `SAFETY_REVIEW`/
+  `ORIGINALITY_REVIEW`, never for a contradicted claim (Case B, which
+  never reaches a provider search at all), and never more than once per
+  revision cycle. `run_full_pipeline`'s default `research_provider` has no
+  real retrieval capability — a content item this orchestrator resolves
+  via bounded research in a real deployment requires a real provider to
+  be supplied. See `agents/researcher/CONTRACT.md`'s "Bounded Research
+  Mode".
 - No new persisted artifact type — a full pipeline run's result is never
   written to disk by this orchestrator; only the underlying agents'
   existing outputs are.

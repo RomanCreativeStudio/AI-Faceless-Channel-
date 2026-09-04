@@ -24,7 +24,8 @@ A faceless content channel project built around four equal content pillars:
 - [`agents/`](./agents/) — agent contracts and working MVP
   implementations: three independent review agents (Research/Fact-Check,
   Safety Reviewer, Originality Reviewer — the first also has a narrow
-  **Autonomous Revision Mode**, see below) plus a thin orchestrator that
+  **Autonomous Revision Mode** and, within it, an even narrower **Bounded
+  Research Mode**, see below) plus a thin orchestrator that
   runs them in order; eight production agents (Producer, Voice,
   Visual Planner, Assets, Assembler, Captions, Thumbnail, Production QA)
   that turn an approved script all the way through to a human-review-ready
@@ -104,5 +105,23 @@ the existing two-consecutive-attempts rule, never a new retry system.
 Three concepts stay deliberately separate and always will: **automated
 review** (an AI evaluates), **autonomous revision** (an AI may create a
 controlled successor artifact when it's safe to), and **human approval**
-(a human decides). A revision `PASS` never means `APPROVED`. See
-`STATE.md` for what's next.
+(a human decides). A revision `PASS` never means `APPROVED`.
+
+**Phase 7G complete: Bounded Research Retrieval + Evidence Expansion.**
+`agents/researcher/src/research.py` extends Autonomous Revision Mode's
+one remaining gap: when a `FACT` claim's evidence gap can't be closed
+with anything already on disk, it now issues **exactly one** bounded,
+deterministic query — the claim's own exact text, verbatim, never
+reworded or broadened — through a pluggable `ResearchProvider`
+abstraction, evaluates every result against a conservative,
+never-domain-hardcoded reliability policy, and either produces one new,
+genuinely reciprocal `research/*.md` entry that hands off to the *same*
+successor-creation mechanism Case A already uses, or escalates. This is
+explicitly **not** general autonomous browsing: no retry, no query
+rewording, no more than one bounded-research pass per revision cycle, and
+a source's reliability can only ever be capped down from what a provider
+claims, never up. Only a deterministic, no-network
+`LocalTestResearchProvider` exists today; a real provider is a distinct,
+deliberate follow-up. `agents/full_pipeline/` needed no control-flow
+change — it already called the unmodified function this now lives
+inside. See `STATE.md` for what's next.
