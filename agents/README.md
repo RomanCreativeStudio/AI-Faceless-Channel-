@@ -14,7 +14,13 @@ override it. No agent has publishing authority, ever, at any stage.
 - [`researcher/`](./researcher/) — Research / Fact-Check Agent:
   populates `RESEARCH.md`/`CLAIM.md` during `RESEARCH`, verifies claims
   during `FACT_CHECK`. FACT_CHECK mode has a working MVP
-  (`researcher/src/`, `researcher/README.md`).
+  (`researcher/src/`, `researcher/README.md`). A third mode, **Autonomous
+  Revision** (Phase 7F, `researcher/src/revision.py`), can create a
+  corrected successor claim when a `FACT_CHECKER` `REVISION_REQUIRED`
+  stems from an evidence gap that *already-existing, already-recorded*
+  research closes — never inventing evidence, never editing an existing
+  claim's wording/classification, never autonomously reopening a
+  `REJECT`. See `researcher/CONTRACT.md`'s "Autonomous Revision Mode."
 - [`safety/`](./safety/) — Safety Reviewer: evaluates `SCRIPT.md` for
   safety/policy risk during `SAFETY_REVIEW`. Has a working MVP
   (`safety/src/`, `safety/README.md`).
@@ -303,12 +309,12 @@ is intentionally never `APPROVED`, so no agent will ever run `--apply`
 against it; see each agent's `tests/test_approval_gate.py` /
 `test_authenticity_classification.py`).
 
-## Full pipeline orchestration (Phase 7E)
+## Full pipeline orchestration (Phase 7E; Autonomous Revision — Phase 7F)
 
 `agents/full_pipeline/` sits one level above everything else on this
-page — it coordinates `agents/orchestrator/` itself (never
-`researcher/`/`safety/`/`originality/` directly) alongside the eight
-production agents:
+page — it coordinates `agents/orchestrator/` itself alongside the eight
+production agents, plus (Phase 7F, and only for `FACT_CHECK`)
+`agents/researcher/`'s own Autonomous Revision Mode directly:
 
 ```
 CONTENT_REVIEW (agents/orchestrator/run_automated_review)
@@ -326,24 +332,46 @@ item still unapproved is reported as `pipeline_status = PASS`,
 mirroring how `agents/orchestrator/` itself reports a clean
 `AUTOMATED_REVIEW_COMPLETE` as `PASS`.
 
-**Genuine finding (verified against every agent's real contract before
-writing any orchestration code, not assumed): no agent in this codebase
-can autonomously fix a `REVISION_REQUIRED`, `BLOCKED`, or stale result.**
-Every production agent's own `CONTRACT.md` documents "no versioned
-supersession" — a stale or failing artifact is reported and left
-untouched until a human (or a not-yet-built future agent) changes the
-underlying input. So `agents/full_pipeline/` invokes each stage's real
-`run_*` at most once per call (`MAX_STAGE_ATTEMPTS = 1`) and never loops
-in-process — retrying with unchanged inputs would either no-op
-(production stages) or actively burn down a review agent's own
-two-consecutive-attempts budget for nothing (content review). "Self-review"
-means safely re-invoking `run_full_pipeline` again later, once something
-has actually changed: every stage's own already-existing freshness/
-precondition check — never new orchestrator-level invalidation code —
-determines exactly which stages are already satisfied and which need to
-re-run, fully scoped to what actually depends on the change. See
+**Genuine finding from Phase 7E (verified against every agent's real
+contract before writing any orchestration code, not assumed): no
+*production* agent in this codebase can autonomously fix a
+`REVISION_REQUIRED`, `BLOCKED`, or stale result.** Every production
+agent's own `CONTRACT.md` documents "no versioned supersession" — a
+stale or failing artifact is reported and left untouched until a human
+(or a not-yet-built future agent) changes the underlying input. So
+`agents/full_pipeline/` invokes each production stage's real `run_*` at
+most once per call (`MAX_STAGE_ATTEMPTS = 1`) and never loops in-process
+— retrying with unchanged inputs would either no-op (production stages)
+or actively burn down a review agent's own two-consecutive-attempts
+budget for nothing (`SAFETY_REVIEW`/`ORIGINALITY_REVIEW`). "Self-review"
+there means safely re-invoking `run_full_pipeline` again later, once
+something has actually changed: every stage's own already-existing
+freshness/precondition check — never new orchestrator-level invalidation
+code — determines exactly which stages are already satisfied and which
+need to re-run, fully scoped to what actually depends on the change. See
 `agents/full_pipeline/CONTRACT.md`'s "Self-review behavior" and
 "Freshness and invalidation" for the complete reasoning.
+
+**Phase 7F changes this for exactly one case: `CONTENT_REVIEW` failing at
+`FACT_CHECK`.** `agents/researcher/`'s Autonomous Revision Mode
+(`researcher/src/revision.py`) can close a real, already-existing
+evidence-linkage gap by creating a successor claim — never inventing
+evidence, never editing the original. When `agents/full_pipeline/` sees
+`CONTENT_REVIEW` block specifically at `FACT_CHECK`, it invokes that
+mode directly (reusing the attempt `agents/orchestrator/` just produced,
+never a redundant re-run); if a successor is created, one more
+`FACT_CHECKER` attempt evaluates it, and — only if that reaches `PASS` —
+the whole content-review chain runs once more so `SAFETY_REVIEW`/
+`ORIGINALITY_REVIEW` get their turn. This is still bounded and still not
+a loop: it's governed entirely by `agents/researcher/`'s own existing
+two-consecutive-attempts gate (`can_run_new_attempt`), never a second
+counter in `agents/full_pipeline/`. See
+`agents/researcher/CONTRACT.md`'s "Autonomous Revision Mode" and
+`agents/full_pipeline/CONTRACT.md`'s "Self-review behavior" for the
+complete reasoning, and
+`agents/full_pipeline/tests/test_researcher_revision_integration.py` for
+proof that this never bypasses `SAFETY_REVIEW`/`ORIGINALITY_REVIEW` or
+the human approval gate.
 
 **A real idempotency gap, found and fixed during this phase**: since
 `agents/full_pipeline/` calls every production stage on every

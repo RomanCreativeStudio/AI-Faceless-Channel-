@@ -28,11 +28,18 @@ class SelfReviewTests(unittest.TestCase):
 
     # --- Scenario 7: a real out-of-band fix is picked up on the next call ---
     def test_pipeline_resumes_after_fix_applied_between_calls(self):
+        # No research/claims/*.md evidence exists anywhere yet — this is
+        # genuinely Case C (insufficient evidence per
+        # agents/researcher/CONTRACT.md's "Autonomous Revision Mode"), so
+        # Phase 7F's own revision engine correctly cannot fix it either
+        # (see agents/orchestrator/tests/builders.build_fact_check_blocked_item,
+        # the same shape). Only a real, later out-of-band fix — never
+        # something either revision engine could have done itself — can
+        # resolve it, which is exactly this test's point.
         self.root.mkdir(parents=True)
         write_content_item(self.root)
-        write_research(self.root)
-        # No supporting source -> FACT_CHECK returns REVISION_REQUIRED (see
-        # agents/orchestrator/tests/builders.build_fact_check_blocked_item).
+        # No supporting source, no research entry anywhere yet -> FACT_CHECK
+        # returns REVISION_REQUIRED with nothing this phase can act on.
         write_claim(self.root, "c1", supporting_sources="`N/A`")
         write_script(self.root)
 
@@ -41,9 +48,11 @@ class SelfReviewTests(unittest.TestCase):
         self.assertEqual(first.current_stage, CONTENT_REVIEW)
         self.assertFalse((self.root / "PRODUCTION.md").exists())
 
-        # A human/operator fixes the underlying issue out of band —
-        # exactly what MAX_STAGE_ATTEMPTS=1 (never an in-process loop)
-        # requires: this orchestrator never invents the fix itself.
+        # A human/operator fixes the underlying issue out of band — adds
+        # the real evidence and cites it — exactly what MAX_STAGE_ATTEMPTS=1
+        # (never an in-process loop) requires: this orchestrator never
+        # invents the fix itself.
+        write_research(self.root)
         write_claim(self.root, "c1", supporting_sources="`research/01-source.md`")
 
         second = run_full_pipeline(self.root, apply=True)
@@ -59,9 +68,11 @@ class SelfReviewTests(unittest.TestCase):
 
     # --- Scenario 8: retry limit reached -> escalate ---
     def test_two_consecutive_revision_required_escalates(self):
+        # No research exists anywhere -> genuinely Case C (insufficient
+        # evidence), unfixable by Phase 7F's revision engine too — see
+        # test_pipeline_resumes_after_fix_applied_between_calls above.
         self.root.mkdir(parents=True)
         write_content_item(self.root)
-        write_research(self.root)
         write_claim(self.root, "c1", supporting_sources="`N/A`")
         write_script(self.root)
 

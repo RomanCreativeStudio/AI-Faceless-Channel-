@@ -10,7 +10,8 @@ Last updated: 2026-09-03
 **Phase 7C-1 — Voice Generation MVP — COMPLETE** (unchanged).
 **Phase 7C-2 — Asset Generation / Retrieval MVP — COMPLETE** (unchanged).
 **Phase 7D — Video Assembly + Captions + Thumbnail + Production QA — COMPLETE** (unchanged).
-**Phase 7E — Full Pipeline Orchestration + Self-Review Loop — COMPLETE.**
+**Phase 7E — Full Pipeline Orchestration + Self-Review Loop — COMPLETE** (unchanged).
+**Phase 7F — Autonomous Revision Engine (Research/Fact-Check) — COMPLETE.**
 
 ## Completed (Phase 7E)
 
@@ -320,14 +321,382 @@ own constraints require, recorded here rather than left implicit.
   visible in `stage_results[CONTENT_REVIEW].raw_result`
   (the real, unmodified `OrchestratorResult`) for anyone who needs it.
 
+## Completed (Phase 7F)
+
+**Step 1 — Inspection:** re-read `CONSTITUTION.md`, `SYSTEM.md`,
+`STATE.md`, `templates/CLAIM.md`, `templates/RESEARCH.md`,
+`templates/REVIEW.md`, `agents/researcher/CONTRACT.md`/`README.md`, every
+Researcher source file, `agents/orchestrator/`, and `agents/full_pipeline/`
+before writing any code — verified the actual repository rather than
+relying on Phase 7E's own summary. Two significant findings from this
+step alone, both verified against real code, not assumed:
+
+1. **`templates/CLAIM.md` and `agents/researcher/src/mutate.py` already
+   define and test the exact supersession primitive this phase needed**
+   (`supersede_claim`: creates a new claim file, appends an immutable
+   trailing note to the old one, never edits the old table) — built in
+   Phase 5, fully unit-tested, but never actually *invoked* by
+   `run_fact_check`'s own `_apply_result`. This phase's job was to build
+   the missing *diagnosis-and-invocation* layer around already-solid,
+   already-tested infrastructure, not to invent supersession from
+   scratch.
+2. **`run_fact_check`'s `_apply_result` never writes back a per-claim
+   `Fact-check status`/`Evidence`/`Confidence level`** despite
+   `CONTRACT.md`'s own "Outputs" section describing this — a pre-existing
+   gap, confirmed by grepping for `update_claim_field` call sites (only
+   test files, never `pipeline.py`). Left unfixed for ordinary claims
+   (out of this phase's stated scope — a separate, distinct feature from
+   autonomous revision); this phase's own `_apply_result` extension
+   writes back `Fact-check status` **only** for claims a
+   `claim_substitutions` mapping actually touched (i.e., only successor
+   claims this phase's own revision engine created), never widening the
+   fix to every ordinary claim.
+
+**Step 2 — Autonomous Revision contract** (`agents/researcher/CONTRACT.md`'s
+new "Autonomous Revision Mode" section): defines exactly what the agent
+MAY (inspect its own `FACT_CHECKER` result and existing `research/*.md`
+evidence, create a new successor claim ID, preserve the original
+unchanged, mark it superseded via the established pattern, cite only
+already-real evidence, create one revision record per diagnosed claim,
+re-verify and update the successor's own `Fact-check status`, trigger a
+new `FACT_CHECKER` attempt, stop at the retry limit) and MUST NOT (edit
+an old claim's wording/classification, erase evidence, fabricate a
+citation/source, upgrade confidence without evidence, turn `FALSE` into
+`PASS`, override a human/Safety/Originality decision, touch
+`CONTENT_ITEM.md` approval, mark anything `APPROVED`/`READY_TO_PUBLISH`,
+publish, or delete history) — the exact task-specified list, verified
+against every downstream implementation choice rather than written
+speculatively first.
+
+**Step 3 — Revision record** (`templates/REVISION.md`, new): identity
+table (Revision ID, Original/Successor claim ID, Triggering review
+attempt, Reason, Original/New claim hash, Evidence used, Changes made,
+Revision author/timestamp, Revision status, Verification result, Human
+escalation state) plus a "What this record does NOT do" section making
+the approval boundary explicit on every single record. `Revision status`
+covers both outcomes — `SUCCESSOR_CREATED` and three escalation variants
+(`ESCALATED_INSUFFICIENT_EVIDENCE`/`ESCALATED_CONTRADICTORY_EVIDENCE`/
+`ESCALATED_ATOMICITY_VIOLATION`) — so a revision record exists and is
+inspectable even when nothing could be fixed, not only on success.
+
+**Step 4 — Revision engine** (`agents/researcher/src/revision.py`, new,
+~350 lines — a narrow component, not a rewrite of the Researcher):
+- `diagnose_claim(claim, bundle)` — the three-case evidence diagnosis
+  (see "Evidence rules" below), mechanical and deterministic, reusing
+  `atomicity.check_atomicity` directly for the fourth (structural) case.
+- `_find_reciprocal_uncited_source(claim, bundle)` — Case A's exact
+  mechanical detector: a `research/*.md` entry that already, reciprocally
+  names this claim in its own `Related claims` field but isn't yet cited
+  in the claim's own `Supporting sources`.
+- `create_successor_claim(root, old_claim, reciprocal_entry, apply,
+  bundle)` — builds (and, if `apply`, writes via `mutate.supersede_claim`)
+  a successor whose `Exact claim`/`Classification`/`Derived from` are
+  byte-identical to the predecessor's; only `Supporting sources` (gains
+  the reciprocal entry) and `Confidence level` (deterministically derived
+  from that entry's own `Source reliability`) change. Immediately
+  re-verifies the successor via `evidence.evaluate_claim` (reused, not
+  duplicated — see "Errors and fixes" #1 below for why this needed one
+  small extension) and writes its `Fact-check status` back via the
+  existing `mutate.update_claim_field` whitelist.
+- `run_autonomous_revision(root, apply, fact_check_result)` — the
+  top-level diagnosis pass: checks the latest `FACT_CHECKER` attempt is
+  `REVISION_REQUIRED` (not `PASS`, not `REJECT`), reuses
+  `multipass.can_run_new_attempt` for the retry gate (no second retry
+  system), diagnoses every flagged `FACT` claim, creates successors for
+  every `FIXABLE` one, and writes one `revisions/revision-<n>.md` per
+  claim diagnosed (fixed or escalated).
+- `run_fact_check_with_autonomous_revision(root, apply)` — the full
+  narrow-component cycle: attempt 1 -> diagnose -> permitted successor
+  creation -> attempt 2 (`run_fact_check(..., claim_substitutions=...)`).
+- `mutate.write_revision_file` (new, in the existing `mutate.py`, not a
+  separate module) — the one new whitelisted write path, filename-pattern
+  gated (`revision-<n>.md`), fails closed with `PermissionError`
+  otherwise, matching every other agent's established writer pattern.
+- `hashing.compute_claim_hash` (new, in the existing `hashing.py`) —
+  sha256 of one claim file's raw content, the mechanical predecessor/
+  successor-immutability proof this phase's own tests rely on.
+
+**Step 5 — Atomic successor creation:** enforced by construction, not a
+separate check — a successor's `Exact claim`/`Classification` are always
+copied verbatim from an already-atomic predecessor (a claim that already
+fails `check_atomicity` is routed to `ESCALATED_ATOMICITY_VIOLATION`
+instead and never gets a successor at all), so the successor is
+trivially atomic too.
+
+**Step 6 — Full-pipeline integration** (`agents/full_pipeline/src/pipeline.py`,
+extended, only after Step 4 was independently tested and stable):
+`_attempt_researcher_revision` — when `CONTENT_REVIEW` blocks specifically
+at `FACT_CHECK` with `REVISION_REQUIRED`, invokes
+`agents.researcher.src.revision.run_autonomous_revision` against the
+attempt `agents/orchestrator/` already produced (never a redundant
+re-run); if it produces at least one successor, runs one more
+`FACT_CHECKER` attempt, then re-runs the whole content-review chain once
+more — reusing `agents/orchestrator/`'s own freshness check to let
+`SAFETY_REVIEW`/`ORIGINALITY_REVIEW` run for the first time only if
+`FACT_CHECK` now genuinely passes. Never continues downstream with an
+unresolved factual issue: if the retry is still `REVISION_REQUIRED` or
+escalates, the pipeline reports exactly that and stops.
+
+**Step 7 — Documentation:** `agents/researcher/CONTRACT.md` (new
+"Autonomous Revision Mode" section, ~180 lines) and `README.md` (new
+section); `agents/full_pipeline/CONTRACT.md`/`README.md` (Self-review
+behavior, Retry/escalation policy, and Forbidden-actions sections
+updated to describe the one bounded exception); `SYSTEM.md`, root
+`README.md`, `agents/README.md` (all updated, including a new "Three
+concepts" explainer distinguishing automated review / autonomous
+revision / human approval in `SYSTEM.md`); `STATE.md` (this file).
+
+## Errors and fixes (this phase)
+
+1. **A successor claim's own re-verification initially, wrongly, stayed
+   `UNVERIFIED`.** The reciprocal research entry a successor cites still,
+   correctly, names the *predecessor*'s short id in its own `Related
+   claims` field (research entries are immutable too — this agent may
+   never edit them, only create new ones) — but `evidence.evaluate_claim`'s
+   general-purpose reciprocal check only ever recognized the *current*
+   claim's own short id, so it correctly-by-its-own-rules, but wrongly for
+   this new case, reported `UNSUPPORTED`. **Found** via manual smoke
+   testing (a successor with a `HIGH`-reliability source still came back
+   `UNVERIFIED`). **Fixed** by adding one optional, backward-compatible
+   parameter — `predecessor_short_id` — to `evidence.evaluate_claim`/
+   `_evaluate_fact` and `factcheck.evaluate_all` (threaded from
+   `claim_substitutions`'s reverse mapping), accepting a reciprocal match
+   against either id: since the successor's `Exact claim` text is
+   byte-identical to the predecessor's, a source that already, truthfully
+   confirmed the predecessor's assertion is equally valid evidence for
+   the successor. This single fix also let a first draft's separate,
+   duplicate `_verify_successor` function in `revision.py` be deleted
+   entirely — one shared implementation, not two.
+2. **`_claims_needing_revision` initially read a claim's stale on-disk
+   `Fact-check status` instead of the just-computed evaluation.** Because
+   ordinary `FACT_CHECK` never writes that field back (see Step 1
+   finding #2), an already-fine claim (already `VERIFIED`-eligible, e.g.
+   the fixture's own `c_ok`) was wrongly re-diagnosed every time, since
+   its file still said `UNVERIFIED`. **Found** via the dedicated
+   multi-claim fixture (`tests/fixtures/revision_item/`), where `c_ok`
+   incorrectly appeared in the diagnosis output. **Fixed** by changing
+   `_claims_needing_revision` to take the freshly-computed
+   `ClaimEvaluation` list (from the triggering `FactCheckResult`, or
+   computed fresh via `factcheck.evaluate_all` if none was supplied)
+   rather than trusting any on-disk field.
+3. **The item-level `Reviewed content hash` initially reflected the
+   substituted (successor) claim's content, breaking
+   `agents/orchestrator/`'s own freshness re-check.** A first design
+   computed `content_hash` from whichever claims were actually
+   evaluated — correct-sounding ("hash what was reviewed"), but wrong in
+   effect: `agents/orchestrator/`'s `find_fresh_pass` always recomputes
+   plainly, with zero knowledge of any substitution, so it would compute
+   a *different* hash (from the *original*, unsubstituted claim) and
+   treat the just-written `PASS` as stale, triggering a pointless
+   re-fact-check that would recreate the identical problem attempt 2 just
+   solved. **Found** by reasoning through the full-pipeline integration
+   design before writing it, not by a failing test. **Fixed** by always
+   computing `content_hash` from the *original*, unsubstituted claim ids
+   (`factcheck.claims_under_review(bundle)` with no substitutions) —
+   safe and stable forever, since a superseded claim's own content never
+   changes again once superseded.
+4. **Three Phase-7E-era `agents/full_pipeline/tests/` fixtures
+   accidentally became "Case A fixable" under this phase's own new
+   capability, changing their outcome from `REVISION_REQUIRED` to
+   `ESCALATE_TO_HUMAN`.** `write_claim(root, "c1",
+   supporting_sources="\`N/A\`")` combined with a default `write_research(root)`
+   call (which reciprocally names `c1` by default) is now a genuine,
+   real, fixable evidence gap — exactly the kind of thing Phase 7F exists
+   to fix, so the *new* behavior is correct, not a regression, but it
+   broke three Phase 7E tests whose entire point was "nothing can fix
+   this automatically." **Found** by the combined test suite going from
+   391 (expected) to 388 pass / 3 fail after wiring the full-pipeline
+   integration. **Fixed** by updating those three fixtures
+   (`test_self_review.py`'s two tests, `test_integration.py`'s one) to
+   remove the upfront `write_research` call, making the claim genuinely
+   Case C (insufficient evidence — no research exists anywhere yet, the
+   same shape `agents/orchestrator/tests/builders.build_fact_check_blocked_item`
+   already uses) so their original intent (idempotent-safe re-invocation
+   when nothing is fixable; a truly stuck item escalates after two
+   attempts) is preserved and still true under Phase 7F. `test_self_review.py`'s
+   own "resumes after fix" test now adds `write_research` as part of the
+   simulated human fix step instead of upfront, which is a more accurate
+   simulation of a real out-of-band fix besides.
+
+Every other module (`models.py`'s new dataclasses, `mutate.py`'s
+`write_revision_file`, `revision_writer.py`, the CLAIM.md template) passed
+its own tests on the first run.
+
+## A near-miss caught during validation
+
+An early draft of the golden-sample safety test for this phase called
+`run_fact_check(GOLDEN_SAMPLE, apply=True)` directly — content review is
+legitimately allowed to write against non-`APPROVED` content (that's how
+`agents/researcher/` is designed to work; this is not new to Phase 7F),
+so this call would have genuinely created a `reviews/fact_checker-1.md`
+file and updated the golden sample's own `Fact-check state` field. This
+was caught *before* running it — by re-reading Phase 7E's own STATE.md
+entry, which records the identical mistake being made and reverted during
+that phase's own validation — and the test was written `apply=False`
+from the start instead, matching `agents/orchestrator/tests/`'s and
+Phase 7E's own established convention. `git status --short -- content/`
+was still run after every test suite pass this phase, as a second,
+independent check; it reported clean every time.
+
+## Validation performed
+
+1. `agents/researcher/tests/test_revision.py` (13 tests),
+   `test_revision_cycle.py` (7 tests), `test_revision_write_boundary.py`
+   (11 tests) — 31/31 pass, covering all 22 required test areas: valid
+   successor creation, predecessor immutability, successor immutability
+   (going forward — the same rules apply to it as any claim),
+   revision-record creation (both `SUCCESSOR_CREATED` and escalated
+   outcomes), evidence preservation, no fabricated evidence, insufficient-
+   evidence escalation, contradictory-evidence handling, atomicity
+   enforcement, classification handling (always retained verbatim), claim
+   hash changes (successor differs, predecessor's own stays traceable to
+   its pre-revision value), old hash preservation, the two-attempt limit,
+   `REJECT` terminal behavior, human escalation (every unresolved case
+   named explicitly), protected-field enforcement (structural
+   `PermissionError`s, not just documentation, plus an AST scan of
+   `revision.py` for forbidden imports/field-name string literals/
+   publishing identifiers), dry-run produces no mutation, apply performs
+   only whitelisted mutation (every new file under `reviews/`,
+   `revisions/`, or a `claims/*_rev*.md` successor — nothing else),
+   downstream stale detection (the *existing* `agents/producer/` staleness
+   check, not new code, correctly fires once a human completes the loop),
+   golden sample untouched, no publishing capability.
+2. The task's own "important architectural test" (section 13): a
+   dedicated `ArchitecturalImmutabilityProofTests` class snapshots the
+   predecessor's exact bytes/hash, runs a full revision cycle, and
+   asserts the predecessor's table content is still byte-identical (the
+   file grows by exactly one appended, documented note — verified via
+   `str.startswith`, not just inequality), the successor has a different
+   ID and a different hash, and the revision record's own text contains
+   both hashes — plus a direct inspection of
+   `mutate.CLAIM_WRITABLE_FIELDS` itself (not just a passing happy-path
+   test) confirming `Exact claim`/`Classification`/`Supporting sources`
+   are absent from it.
+3. `agents/full_pipeline/tests/test_researcher_revision_integration.py`
+   (3 tests) — full-pipeline integration: a `REVISION_REQUIRED` at
+   `FACT_CHECK` is resolved via a real successor claim and the pipeline
+   proceeds to run `SAFETY_REVIEW`/`ORIGINALITY_REVIEW` for the first
+   time (never skipped, never bypassed); after simulated human approval,
+   the fix carries all the way through to `PRODUCTION_QA` (the very last
+   stage) without being blocked anywhere revision itself resolved,
+   correctly still blocking at the separate, already-documented Phase 7D
+   `RETRIEVED`-strategy limitation (this fixture's claims are
+   `FACT`-classified, so this is expected, not a bug); a safety-escalating
+   beat alongside an otherwise-fixable fact-check issue still correctly
+   escalates rather than letting revision paper over a genuine safety
+   problem.
+4. Combined suite — `python3 -m unittest discover -s agents -t . -p
+   "test_*.py"` — **391/391 pass, 0 regressions** (357 pre-existing + 31
+   Researcher revision + 3 full-pipeline revision integration).
+5. Every agent's own suite re-run individually and green: researcher 74
+   (43 pre-existing + 31 new), safety 27, originality 31, orchestrator 30,
+   producer 20, voice 33, visual_planner 18, assets 45, assembler 21,
+   captions 17, thumbnail 13, production_qa 25, full_pipeline 37 (34
+   pre-existing + 3 new).
+6. Golden-sample safety: `git status --short -- content/` confirmed empty
+   after every test run this phase; a dedicated
+   `test_golden_sample_never_modified_by_revision_engine` runs both
+   `run_fact_check` and `run_autonomous_revision` against the real golden
+   sample with `apply=False` (matching the established convention — see
+   "A near-miss" above) and confirms zero byte-level changes, no
+   `revisions/` directory created, and no `*_rev*.md` successor claim
+   file anywhere under it.
+7. No publishing capability: an AST-based scan of `revision.py` (checking
+   for `upload`/`publish`/`post_video`/`youtube`/`schedule_publish`
+   identifiers) plus a source-text scan for protected field-name string
+   literals (`Production status`, `Safety state`, `Originality state`,
+   `Production QA state`, `Owner approval state`, `READY_TO_PUBLISH`,
+   `"APPROVED"`) — all absent, and a module-import scan confirming
+   `revision.py` never imports from any sibling production/review agent's
+   own module.
+8. No approval bypass: a full-pipeline-level test confirms a genuine
+   revision-resolved `FACT_CHECK` `PASS` never sets `CONTENT_ITEM.md`'s
+   `status`, and production continuing afterward still requires the same
+   human-set `APPROVED` the approval gate has always required — revision
+   `PASS` is never conflated with human approval, anywhere.
+9. Predecessor immutability, review-history immutability, the two-attempt
+   cap, `REJECT`-remains-terminal, insufficient-evidence escalation, and
+   downstream stale detection are each covered by a dedicated test (see
+   items 1-3 above) — verified structurally (byte/hash comparison,
+   `PermissionError` assertions), not only by a passing happy path.
+
+## Genuine finding
+
+**Two evidence-linkage-repair capabilities already existed as tested,
+unused primitives before this phase began** (`mutate.supersede_claim`,
+`mutate.update_claim_field`) — Phase 7F's actual work was building the
+*diagnosis and invocation* layer that decides *when* and *how* to use
+them safely, not inventing new low-level write mechanics. This is worth
+recording plainly: the codebase's own established immutability/
+supersession convention (`templates/CLAIM.md`'s Atomicity rule, written
+in Phase 4-5) was designed with exactly this kind of future capability in
+mind, and it held up completely unmodified.
+
+**A second, narrower finding, discovered while making the successor's
+own re-verification work correctly** (see "Errors and fixes" #1):
+`evidence.py`'s reciprocal-evidence check is fundamentally built around
+"does this exact claim id appear in the source's own declaration" — a
+reasonable, sufficient rule for ordinary fact-check, but one that has no
+way to express "this is the same assertion under a new id" without an
+explicit extension. The `predecessor_short_id` parameter this phase added
+is the minimum such extension, applied nowhere except this one revision
+path (`None` everywhere else, reproducing prior behavior exactly) — but
+it is a real, permanent addition to `evidence.py`'s public surface, not
+purely internal to `revision.py`, and is documented as such in both
+modules' docstrings.
+
+## Known limitations
+
+- Autonomous Revision Mode only ever closes an evidence-*linkage* gap (an
+  already-existing, already-recorded, reciprocally-confirming source not
+  yet cited) — it never rewords a claim, never reclassifies one, and
+  never helps a claim whose problem is genuinely contradictory or wholly
+  absent evidence (Cases B/C always escalate). This is intentional and
+  documented, not a shortcut — see `agents/researcher/CONTRACT.md`'s
+  "Evidence requirements".
+- No RESEARCH-mode implementation still — this phase's revision engine
+  can only re-link to research that already exists on disk; it can never
+  retrieve or generate new source material. A future RESEARCH-mode
+  implementation (still unbuilt, still unscoped) would make more claims
+  genuinely fixable, but that is a different, larger capability than this
+  phase's own deliberately narrow scope.
+- No in-process retry loop, same as every other phase's agents — one
+  diagnose-and-revise cycle per call; "self-review" across separate calls
+  is what makes repeated invocation safe and correct.
+- A revision-fixed `FACT_CHECK` `PASS` only takes effect at the
+  `SCRIPT.md`/production level once a human updates `SCRIPT.md`'s
+  `Verified claims` table to cite the successor — this agent never edits
+  `SCRIPT.md` (Forbidden actions, unchanged from Phase 5). Until that
+  happens, `agents/producer/` and everything downstream of it keep
+  building from the *predecessor's* content, which is fine (it's
+  unchanged and still real) but means the successor's improved evidence
+  isn't yet reflected anywhere `SCRIPT.md` is read from directly.
+- `agents/safety/` and `agents/originality/` still have zero autonomous-
+  fix capability — this phase adds one narrow capability to
+  `agents/researcher/` only, exactly as scoped ("First implementation:
+  Research / Fact-Check Revision").
+- The pre-existing gap found in Step 1 (ordinary `FACT_CHECK` never
+  writes a claim's own `Fact-check status` back to disk, for claims that
+  aren't part of a revision cycle) remains unfixed — out of this phase's
+  scope, and touching it more broadly risks changing established Phase 5
+  behavior no other phase's tests currently depend on.
+- Inherits every agent's own previously-documented limitations unchanged
+  (no real TTS/rendering/image-generation, `RETRIEVED`-strategy assets
+  can never pass Production QA this phase, no versioned supersession for
+  production artifacts, etc.).
+
 ## Next task
 
-No further phase was specified as "exact next task" by this phase's
-instructions beyond delivering this report. A natural continuation, not
-yet started, would be a genuine autonomous-fix capability for at least
-one stage (e.g. a `RESEARCH`-mode implementation that could legitimately
-let `agents/researcher/` "fix and create the next attempt" per
-`templates/REVIEW.md` rule 5, rather than only re-evaluating unchanged
-evidence) — but this remains explicitly unbuilt and unscoped until a
-future phase names it. Publishing remains permanently human-gated per
-`CONSTITUTION.md` rule 2, regardless of anything built so far.
+No further phase was specified as the "exact next task" by this phase's
+own instructions beyond delivering this report and, if logically defined,
+naming the next one. Two natural, not-yet-scoped continuations exist:
+(1) extending Autonomous Revision Mode's evidence-linkage-repair pattern
+to `agents/safety/`/`agents/originality/` where a genuinely safe,
+narrow, deterministic fix exists for either (none has been identified
+yet — this would need its own careful evidence-rules analysis, not a
+blind copy of this phase's pattern); (2) a RESEARCH-mode implementation
+that would make substantially more `FACT_CHECK` failures genuinely
+fixable by giving this phase's revision engine real new evidence to work
+with, not just already-existing evidence to re-link. Neither is started.
+Publishing remains permanently human-gated per `CONSTITUTION.md` rule 2,
+regardless of anything built so far.

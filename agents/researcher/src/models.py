@@ -154,3 +154,77 @@ class FactCheckResult:
     blocked: bool = False
     blocked_reason: str = ""
     review_path: str = ""
+
+
+class RevisionCase(str, Enum):
+    """Which of Autonomous Revision Mode's three evidence cases a claim
+    fell into — see agents/researcher/CONTRACT.md's "Evidence
+    requirements". Only FIXABLE ever produces a successor claim.
+    """
+
+    ALREADY_OK = "ALREADY_OK"  # not flagged for revision at all
+    FIXABLE = "FIXABLE"  # Case A: existing evidence supports a correction
+    CONTRADICTED = "CONTRADICTED"  # Case B: existing evidence conflicts, never invent the replacement
+    INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"  # Case C: nothing to work with
+    ATOMICITY_VIOLATION = "ATOMICITY_VIOLATION"  # would need reworded text — refuses to fabricate wording
+
+
+class RevisionStatus(str, Enum):
+    SUCCESSOR_CREATED = "SUCCESSOR_CREATED"
+    ESCALATED_INSUFFICIENT_EVIDENCE = "ESCALATED_INSUFFICIENT_EVIDENCE"
+    ESCALATED_CONTRADICTORY_EVIDENCE = "ESCALATED_CONTRADICTORY_EVIDENCE"
+    ESCALATED_ATOMICITY_VIOLATION = "ESCALATED_ATOMICITY_VIOLATION"
+
+
+@dataclass
+class ClaimRevisionOutcome:
+    """One claim's diagnosis-and-outcome record, produced by
+    revision.diagnose_claim / revision.run_autonomous_revision.
+    """
+
+    original_short_id: str
+    case: RevisionCase
+    reason: str
+    successor_short_id: str = ""
+    evidence_used: list[str] = field(default_factory=list)  # research/*.md refs, real only
+    changes_made: str = ""
+    original_hash: str = ""
+    new_hash: str = ""
+    verification_result: str = ""  # the successor's re-evaluated Fact-check status, or ""
+    revision_path: str = ""
+
+
+@dataclass
+class RevisionResult:
+    """Result of one Autonomous Revision Mode pass — see
+    agents/researcher/src/revision.py's run_autonomous_revision().
+    """
+
+    content_id: str
+    triggering_review_attempt: int
+    claim_outcomes: list[ClaimRevisionOutcome]
+    reasons: list[str]
+    escalate_to_human: bool
+    aborted: bool = False
+    abort_reason: str = ""
+    blocked: bool = False
+    blocked_reason: str = ""
+
+    @property
+    def successors_created(self) -> list[str]:
+        return [o.successor_short_id for o in self.claim_outcomes if o.successor_short_id]
+
+    @property
+    def claim_substitutions(self) -> dict[str, str]:
+        """old short_id -> new short_id, for every claim a successor was
+        actually created for — the only thing pipeline.run_fact_check's
+        optional `claim_substitutions` parameter ever needs."""
+        return {
+            o.original_short_id: o.successor_short_id
+            for o in self.claim_outcomes
+            if o.successor_short_id
+        }
+
+    @property
+    def produced(self) -> bool:
+        return bool(self.successors_created)

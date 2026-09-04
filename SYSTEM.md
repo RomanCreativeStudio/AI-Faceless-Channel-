@@ -7,10 +7,15 @@ Operational architecture for the AI Faceless Channel project. Governed by
 
 **Phase 6 complete (automated review layer); Phase 7D complete (Video
 Assembly + Captions + Thumbnail + Production QA); Phase 7E complete (Full
-Pipeline Orchestration + Self-Review Loop).** Thirteen agents have
-working, tested implementations, stdlib Python, no dependencies: the
-Research / Fact-Check Agent (`agents/researcher/src/`, FACT_CHECK mode
-only), the Safety Reviewer (`agents/safety/src/`, SAFETY_REVIEW only),
+Pipeline Orchestration + Self-Review Loop); Phase 7F complete (Autonomous
+Revision Engine — Research/Fact-Check).** Thirteen agents have working,
+tested implementations, stdlib Python, no dependencies: the Research /
+Fact-Check Agent (`agents/researcher/src/`, FACT_CHECK mode, plus a third,
+narrow **Autonomous Revision Mode** — Phase 7F — that can create a
+corrected successor claim when *already-existing, already-recorded*
+evidence closes a real gap, but never invents evidence, never edits an
+existing claim, and never approves anything), the Safety Reviewer
+(`agents/safety/src/`, SAFETY_REVIEW only),
 the Originality Reviewer (`agents/originality/src/`, ORIGINALITY_REVIEW
 only), the Unified Automated Review Orchestrator
 (`agents/orchestrator/src/`, which runs the three in order and
@@ -52,6 +57,20 @@ generation or retrieval integration, no YouTube/publishing integration,
 no analytics, no learning engine. Nothing outside the thirteen agent
 directories above executes.
 
+**Three concepts this project keeps deliberately separate, and always
+will** (Phase 7F's own reason for existing): **automated review** — an AI
+*evaluates* the work and reports a verdict (`FACT_CHECK`,
+`SAFETY_REVIEW`, `ORIGINALITY_REVIEW`, `PRODUCTION_QA`); **autonomous
+revision** — an AI is permitted to *create a controlled successor
+artifact* when doing so is deterministically safe (Phase 7F's one
+instance: a new claim citing already-existing evidence, never editing or
+inventing anything); and **human approval** — a human decides whether the
+content is actually approved, published, or ready to publish
+(`CONSTITUTION.md` rule 1). A `PASS` from any review or revision step
+never means, implies, or advances toward `APPROVED`. No agent conflates
+these three, and no future phase may either without a `CONSTITUTION.md`
+change.
+
 ## Directory structure
 
 ```
@@ -74,12 +93,13 @@ directories above executes.
 │   ├── TIMELINE.md             Assembly timeline + output record (Phase 7D)
 │   ├── CAPTIONS.md             Caption chunks + timing (Phase 7D)
 │   ├── THUMBNAIL.md            Thumbnail specification (Phase 7D)
-│   └── PRODUCTION_QA.md        Structural readiness verdict (Phase 7D)
+│   ├── PRODUCTION_QA.md        Structural readiness verdict (Phase 7D)
+│   └── REVISION.md             Claim revision record — links predecessor + successor (Phase 7F)
 ├── agents/                  Agent contracts + implementations
-│   ├── researcher/            Research / Fact-Check Agent
+│   ├── researcher/            Research / Fact-Check Agent + Autonomous Revision Mode
 │   │   ├── CONTRACT.md           Design contract
 │   │   ├── README.md             How to run it, module map, limitations
-│   │   ├── src/                  MVP implementation (FACT_CHECK mode only)
+│   │   ├── src/                  MVP implementation (FACT_CHECK mode, Autonomous Revision Mode — Phase 7F)
 │   │   └── tests/                Unit + integration tests
 │   ├── safety/                  Safety Reviewer
 │   │   ├── CONTRACT.md           Design contract
@@ -282,10 +302,16 @@ See `agents/README.md`, including its shared result-shape convention for
 how a future orchestrator would run every stage in sequence.
 
 - `agents/researcher/CONTRACT.md` — Research / Fact-Check Agent (RESEARCH
-  and FACT_CHECK stages). FACT_CHECK has a working MVP
-  (`agents/researcher/src/`). Touches only `reviews/*.md` and two
+  and FACT_CHECK stages), plus a third mode, **Autonomous Revision**
+  (Phase 7F). FACT_CHECK and Autonomous Revision both have working MVPs
+  (`agents/researcher/src/`). Touches only `reviews/*.md`, two
   whitelisted `CONTENT_ITEM.md` fields (`Research state`, `Fact-check
-  state`).
+  state`), and — Autonomous Revision only — new successor
+  `claims/<short-id>.md` files (via the existing, immutable-predecessor
+  `supersede_claim` primitive), `revisions/revision-<n>.md` records, and
+  a successor's own `Fact-check status` field post-verification. Never
+  edits an old claim's wording/classification, never invents evidence,
+  never autonomously reopens a `REJECT`.
 - `agents/safety/CONTRACT.md` — Safety Reviewer (SAFETY_REVIEW stage).
   Has a working MVP (`agents/safety/src/`). Touches only `reviews/*.md`
   and one whitelisted `CONTENT_ITEM.md` field (`Safety state`); never
@@ -384,18 +410,23 @@ how a future orchestrator would run every stage in sequence.
   `READY_TO_PUBLISH` remain exclusively human-set; never touches `Human
   review state` or `CONTENT_ITEM.md`'s own `status`.
 - `agents/full_pipeline/CONTRACT.md` — Full Pipeline Orchestrator (Phase
-  7E). Has a working MVP (`agents/full_pipeline/src/`): sequences
-  `agents/orchestrator/`'s own content-review chain, a read-only
-  `CONTENT_APPROVAL_GATE`, then all eight production agents in their real
-  precondition order, stopping at the first stage that doesn't cleanly
-  succeed. Makes no review/production/QA judgment of its own; has no
-  `mutate.py` — every write happens through an invoked agent's own
+  7E; extended Phase 7F). Has a working MVP (`agents/full_pipeline/src/`):
+  sequences `agents/orchestrator/`'s own content-review chain, a
+  read-only `CONTENT_APPROVAL_GATE`, then all eight production agents in
+  their real precondition order, stopping at the first stage that doesn't
+  cleanly succeed. Makes no review/production/QA judgment of its own; has
+  no `mutate.py` — every write happens through an invoked agent's own
   existing path. Invokes each stage at most once per call
-  (`MAX_STAGE_ATTEMPTS = 1`) since no agent this phase can autonomously
-  fix a `REVISION_REQUIRED`/`BLOCKED`/stale result; "self-review" means
-  safely re-invoking the same call after something changes out of band,
-  relying entirely on each stage's own existing freshness check. Can
-  never report or cause anything beyond `COMPLETE` (`Production status =
+  (`MAX_STAGE_ATTEMPTS = 1`), with one bounded exception (Phase 7F): when
+  `CONTENT_REVIEW` fails specifically at `FACT_CHECK`, it invokes
+  `agents/researcher/`'s Autonomous Revision Mode and, if that produces a
+  real fix, one more `FACT_CHECKER` attempt plus a full content-review
+  re-run — governed entirely by `agents/researcher/`'s own
+  two-consecutive-attempts gate, never a second counter. For every other
+  stage, "self-review" still means safely re-invoking the same call after
+  something changes out of band, relying entirely on each stage's own
+  existing freshness check. Can never report or cause anything beyond
+  `COMPLETE` (`Production status =
   HUMAN_REVIEW`).
 
 All agents: never run unless explicitly invoked (no scheduling, no
@@ -409,7 +440,11 @@ triggers); `--apply` is opt-in, a dry run is the default; never touch
 - No automation or scheduling — agents only run when explicitly invoked
   by a human.
 - No RESEARCH-mode implementation (source collection/live retrieval) —
-  FACT_CHECK mode only for the Research/Fact-Check Agent.
+  FACT_CHECK mode and Autonomous Revision Mode only for the
+  Research/Fact-Check Agent. Autonomous Revision Mode (Phase 7F) is
+  bounded to what's already on disk — it can never retrieve, and never
+  invents, new evidence; it only re-links a claim to an already-existing,
+  already-recorded, reciprocally-confirming research entry.
 - No internet-wide plagiarism/similarity search — the Originality
   Reviewer only compares against explicitly supplied channel metadata
   and reference material.
@@ -451,13 +486,17 @@ triggers); `--apply` is opt-in, a dry run is the default; never touch
   `APPROVED` or `READY_TO_PUBLISH`, and neither touches `CONTENT_ITEM.md`'s
   own `status` or `PRODUCTION.md`'s `Human review state`. Those remain
   exclusively human/owner-set, with no automated path around them.
-- No in-process self-fix/retry loop anywhere in `agents/full_pipeline/` —
-  a deliberate architectural finding (Phase 7E), not a missing feature:
-  no agent in this codebase has authority to autonomously regenerate an
-  existing artifact, so "self-review" means safely re-invoking the same
-  call later, after a human (or a not-yet-built future agent) changes
-  something out of band — see `agents/full_pipeline/CONTRACT.md`'s
-  "Self-review behavior".
+- No in-process self-fix/retry loop for production stages,
+  `SAFETY_REVIEW`, or `ORIGINALITY_REVIEW` — a deliberate architectural
+  finding (Phase 7E), not a missing feature: no agent covering those
+  stages has authority to autonomously regenerate an existing artifact,
+  so "self-review" there means safely re-invoking the same call later,
+  after a human (or a not-yet-built future agent) changes something out
+  of band — see `agents/full_pipeline/CONTRACT.md`'s "Self-review
+  behavior". Phase 7F adds exactly one bounded exception:
+  `FACT_CHECK`-level `REVISION_REQUIRED` can trigger one autonomous
+  revision-and-recheck cycle, governed entirely by
+  `agents/researcher/`'s own existing two-consecutive-attempts gate.
 - No true multi-stage rollback — a `CONTENT_ITEM.md status = APPROVED`
   that a human sets is never automatically reverted by a later production
   failure; every downstream staleness/failure is caught and reported, but

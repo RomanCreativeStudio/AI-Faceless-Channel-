@@ -12,6 +12,8 @@ from pathlib import Path
 from ...orchestrator.src.pipeline import run_automated_review
 from ...researcher.src import parsing
 from ...researcher.src.loader import load_content_item
+from ...researcher.src.pipeline import run_fact_check
+from ...researcher.src.revision import run_autonomous_revision
 from .status_sequence import stage_already_completed_by_a_later_stage
 from .models import (
     BLOCKED,
@@ -45,6 +47,51 @@ _REVIEW_OUTCOME_MAP = {
     "HUMAN_ESCALATION": "ESCALATED",
     "SYSTEM_ERROR": "SYSTEM_ERROR",
 }
+
+
+def _attempt_researcher_revision(
+    root: Path, apply: bool, review_result, originality_channel_index=None,
+    originality_reference_paths=None,
+):
+    """Invokes agents/researcher/'s Autonomous Revision Mode against the
+    FACT_CHECKER attempt agents/orchestrator/ just produced (never
+    re-running fact-check redundantly — reuses that exact attempt 1).
+    Returns `None` if revision made no difference this call (dry run, no
+    successors created, blocked, or aborted) — the caller then falls
+    through to ordinary REVISION_REQUIRED handling. Otherwise returns
+    `(new_review_result, new_review_outcome)` reflecting attempt 2 and,
+    if that reached PASS, a full re-run of the content-review chain so
+    SAFETY_REVIEW/ORIGINALITY_REVIEW get their turn — never continuing
+    downstream with an unresolved factual issue (task section 10).
+    """
+    revision_result = run_autonomous_revision(root, apply=apply)
+    if revision_result.aborted or revision_result.blocked or not revision_result.produced:
+        return None
+    if not apply:
+        # A dry run diagnoses but writes no successor, so there is
+        # nothing on disk yet for a real re-check — see
+        # agents/researcher/README.md's "Known limitations".
+        return None
+
+    # Attempt 2, evaluating the successor in place of what it superseded.
+    run_fact_check(root, apply=True, claim_substitutions=revision_result.claim_substitutions)
+
+    # A full re-run of the content-review chain, whatever attempt 2's own
+    # verdict was: if it reached PASS, agents/orchestrator/'s own
+    # freshness check reuses it for free (see CONTRACT.md's "Hash and
+    # supersession behavior") and SAFETY_REVIEW/ORIGINALITY_REVIEW get
+    # their turn for the first time; if attempt 2 is still
+    # REVISION_REQUIRED, the exact same two-consecutive-attempts gate
+    # already reused here (can_run_new_attempt, inside
+    # agents/orchestrator/'s own adapter) correctly refuses a third
+    # attempt and reports the still-failing latest verdict — never a
+    # separate, competing retry system.
+    rerun = run_automated_review(
+        root, apply=apply, originality_channel_index=originality_channel_index,
+        originality_reference_paths=originality_reference_paths,
+    )
+    outcome = _REVIEW_OUTCOME_MAP.get(rerun.overall_result.value, "SYSTEM_ERROR")
+    return rerun, outcome
 
 
 def run_full_pipeline(
@@ -135,21 +182,70 @@ def run_full_pipeline(
         )
 
     if review_outcome == "REVISION_REQUIRED":
-        failed.append(CONTENT_REVIEW)
-        revision_requests[CONTENT_REVIEW] = [review_result.blocking_reason]
-        skipped.extend(STAGE_ORDER[1:])
-        reason = (
-            f"CONTENT_REVIEW: {review_result.first_blocking_stage} requires revision — "
-            f"{review_result.blocking_reason}. No agent in this phase has autonomous fix "
-            "authority for this — see CONTRACT.md's Self-review behavior."
-        )
-        return _finish(
-            pipeline_status=REVISION_REQUIRED, current_stage=CONTENT_REVIEW,
-            human_action_required=True, human_action_reason=reason, terminal_reason=reason,
-        )
+        # The one autonomous-fix capability that exists this phase (Phase
+        # 7F): agents/researcher/'s Autonomous Revision Mode, and only
+        # when FACT_CHECK itself was the blocking stage — SAFETY_REVIEW/
+        # ORIGINALITY_REVIEW still have no autonomous-fix authority. See
+        # agents/researcher/CONTRACT.md's "Autonomous Revision Mode".
+        if review_result.first_blocking_stage == "FACT_CHECK":
+            revision_outcome = _attempt_researcher_revision(
+                root, apply, review_result, originality_channel_index, originality_reference_paths,
+            )
+            if revision_outcome is not None:
+                review_result, review_outcome = revision_outcome
+                stage_results[CONTENT_REVIEW] = StageRunOutcome(
+                    stage=CONTENT_REVIEW, executed=True, skipped=False, outcome=review_outcome,
+                    reasons=[review_result.blocking_reason] if review_result.blocking_reason else [],
+                    produced=apply and review_outcome == "PASS", attempt=2, raw_result=review_result,
+                )
+                if review_result.human_escalation:
+                    escalated.append(CONTENT_REVIEW)
 
-    # review_outcome == "PASS"
-    completed.append(CONTENT_REVIEW)
+                if review_outcome == "PASS":
+                    completed.append(CONTENT_REVIEW)
+                    # fall through to CONTENT_APPROVAL_GATE below
+                elif review_outcome in ("REJECT", "ESCALATED"):
+                    skipped.extend(STAGE_ORDER[1:])
+                    reason = (
+                        f"CONTENT_REVIEW escalated at {review_result.first_blocking_stage} even "
+                        f"after autonomous revision was attempted: {review_result.blocking_reason}"
+                    )
+                    return _finish(
+                        pipeline_status=ESCALATE_TO_HUMAN, current_stage=CONTENT_REVIEW,
+                        human_action_required=True, human_action_reason=reason, terminal_reason=reason,
+                    )
+                else:
+                    failed.append(CONTENT_REVIEW)
+                    revision_requests[CONTENT_REVIEW] = [review_result.blocking_reason]
+                    skipped.extend(STAGE_ORDER[1:])
+                    reason = (
+                        f"CONTENT_REVIEW: autonomous revision was attempted but "
+                        f"{review_result.first_blocking_stage} still requires revision — "
+                        f"{review_result.blocking_reason}. Human action required."
+                    )
+                    return _finish(
+                        pipeline_status=REVISION_REQUIRED, current_stage=CONTENT_REVIEW,
+                        human_action_required=True, human_action_reason=reason, terminal_reason=reason,
+                    )
+
+        if CONTENT_REVIEW not in completed:
+            failed.append(CONTENT_REVIEW)
+            revision_requests[CONTENT_REVIEW] = [review_result.blocking_reason]
+            skipped.extend(STAGE_ORDER[1:])
+            reason = (
+                f"CONTENT_REVIEW: {review_result.first_blocking_stage} requires revision — "
+                f"{review_result.blocking_reason}. No agent in this phase has autonomous fix "
+                "authority for this — see CONTRACT.md's Self-review behavior."
+            )
+            return _finish(
+                pipeline_status=REVISION_REQUIRED, current_stage=CONTENT_REVIEW,
+                human_action_required=True, human_action_reason=reason, terminal_reason=reason,
+            )
+
+    # review_outcome == "PASS" (either on the first attempt, or after a
+    # successful autonomous revision already appended it above).
+    if CONTENT_REVIEW not in completed:
+        completed.append(CONTENT_REVIEW)
 
     # --- Stage: CONTENT_APPROVAL_GATE — read-only, no agent, no mutation ---
     content_item_path = root / "CONTENT_ITEM.md"

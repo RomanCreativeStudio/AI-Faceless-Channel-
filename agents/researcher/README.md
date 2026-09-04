@@ -3,8 +3,9 @@
 Implements [`CONTRACT.md`](./CONTRACT.md). Phase 5 of the roadmap: the
 first agent that actually runs, scoped to **FACT_CHECK only** (structured
 evidence evaluation against existing `research/`/`claims/` records — not
-live web retrieval, and not RESEARCH-mode source collection). Stdlib
-Python only, no dependencies.
+live web retrieval, and not RESEARCH-mode source collection). Phase 7F
+adds a third mode, **Autonomous Revision** (`src/revision.py`) — see
+below. Stdlib Python only, no dependencies.
 
 ## Running it
 
@@ -50,6 +51,8 @@ python3 -m unittest discover -s agents/researcher/tests -t .
 | `review_writer.py` | Renders a `REVIEW.md`-formatted file |
 | `mutate.py` | The *only* code that writes to an existing `CONTENT_ITEM.md`/`CLAIM.md`, field-whitelisted |
 | `pipeline.py` | `run_fact_check()` — the one entry point gluing all of the above |
+| `revision.py` | Autonomous Revision Mode (Phase 7F) — see below |
+| `revision_writer.py` | Renders a `REVISION.md`-formatted file |
 | `__main__.py` | CLI wrapper |
 
 ## Design decisions worth knowing about
@@ -96,8 +99,66 @@ FACT_CHECK evaluator included) keeps working unchanged. No crawler is
 built here — CONTRACT.md's RESEARCH mode (source collection) is not yet
 implemented, only FACT_CHECK mode is.
 
+## Autonomous Revision Mode (Phase 7F)
+
+A narrow third mode, `src/revision.py`, alongside FACT_CHECK — see
+`CONTRACT.md`'s "Autonomous Revision Mode" for the full contract. In one
+sentence: when a `FACT_CHECKER` attempt is `REVISION_REQUIRED`, this
+module looks for a `FACT` claim whose evidence gap is closeable with
+*already-existing, already-recorded* research — never invented — and, if
+one exists, creates a new **successor claim** (never editing the
+original) citing it. Anything it can't close with real evidence
+(contradicted, insufficient, or a claim that already violates the
+Atomicity rule) it leaves alone and escalates.
+
+```
+python3 -m agents.researcher.src <content-item-dir> --apply   # attempt 1
+python3 -c "from agents.researcher.src.revision import run_fact_check_with_autonomous_revision as r; \
+            from pathlib import Path; print(r(Path('<content-item-dir>'), apply=True))"
+```
+
+Or, more commonly, invoked through `agents/full_pipeline/`, which
+recognizes a FACT_CHECK-level `REVISION_REQUIRED` and calls this
+automatically — see `agents/full_pipeline/README.md`.
+
+**Three concepts this phase deliberately keeps separate** (see
+`STATE.md` for the full reasoning): *automated review* (an AI evaluates
+the work — FACT_CHECK mode, unchanged), *autonomous revision* (an AI is
+permitted to create a controlled successor artifact — this mode, new),
+and *human approval* (a human decides whether the content is actually
+approved — untouched, permanently out of any agent's reach). A `PASS`
+from this module never means `CONTENT_ITEM.md` is `APPROVED`.
+
+**The one genuinely new piece of infrastructure**: `run_fact_check`
+gained an optional, backward-compatible `claim_substitutions` parameter,
+and `evidence.evaluate_claim`/`_evaluate_fact` gained an optional
+`predecessor_short_id` parameter — both `None` by default, reproducing
+prior behavior exactly. Together they let a re-fact-check pass evaluate a
+successor claim in place of what it superseded (since a superseded
+claim's own cited research entry still, correctly, names the
+*predecessor* — research entries are immutable too) without ever editing
+`SCRIPT.md`. Every substitution is disclosed in the resulting
+`REVIEW.md`'s `Notes`, never silent.
+
+`templates/REVISION.md` (new) is the only place a predecessor and its
+successor are formally linked — see its own "What this record does NOT
+do" for the approval boundary.
+
 ## Known limitations (MVP scope)
 
+- Autonomous Revision Mode only ever acts on `FACT`-classified claims and
+  only ever closes an evidence-*linkage* gap (a real, already-existing,
+  reciprocal research entry not yet cited) — it never touches
+  `ASSUMPTION`/`INFERENCE`/`SPECULATION` claims, never rewords a claim,
+  and never reclassifies one. A claim needing an actual wording
+  correction (not just a citation) always escalates instead — see
+  `CONTRACT.md`'s "Evidence requirements".
+- No in-process retry loop — `run_fact_check_with_autonomous_revision`
+  performs exactly one diagnose-and-revise cycle per call; "self-review"
+  across separate calls means safely re-invoking it later, once
+  something has actually changed (a human edit, or a fresh, real
+  research entry). See `agents/full_pipeline/CONTRACT.md`'s "Self-review
+  behavior" for the identical reasoning applied one layer up.
 - `INFERENCE`/`SPECULATION` claims' `Fact-check status` always resolves to
   `NOT_APPLICABLE`, even when `evidence.py` can tell their `Derived from`
   chain is broken or contradicted (that shows up as `EvidenceSupport`

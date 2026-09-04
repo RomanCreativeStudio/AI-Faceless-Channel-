@@ -29,23 +29,33 @@ through to `PRODUCTION_QA`.
 
 ## Self-review — what it actually is
 
-**No agent in this codebase can autonomously fix a `REVISION_REQUIRED`,
-`BLOCKED`, or stale result.** Every production agent's own contract
-documents "no versioned supersession"; the three review agents can only
-"fix and create the next attempt" if *something upstream actually
-changed* — nothing in this phase implements the fixing half. So this
-orchestrator never loops in-process; it runs each stage's real `run_*`
-exactly once per call (`MAX_STAGE_ATTEMPTS = 1`) and reports
-`human_action_required` the moment anything doesn't cleanly pass.
+**No *production* agent in this codebase can autonomously fix a
+`REVISION_REQUIRED`, `BLOCKED`, or stale result.** Every production
+agent's own contract documents "no versioned supersession." So this
+orchestrator invokes every stage's real `run_*` at most once per call
+(`MAX_STAGE_ATTEMPTS = 1`) and reports `human_action_required` the moment
+anything doesn't cleanly pass — with **one exception, added Phase 7F**:
+when `CONTENT_REVIEW` fails specifically at `FACT_CHECK`, this
+orchestrator invokes `agents/researcher/`'s Autonomous Revision Mode,
+which can genuinely close a real, already-existing evidence gap and
+create a corrected successor claim (never inventing anything — see
+`agents/researcher/CONTRACT.md`'s "Evidence requirements"). If that
+produces a fix, one more `FACT_CHECKER` attempt runs against the
+successor, and — only if that reaches `PASS` — the whole content-review
+chain re-runs once more so `SAFETY_REVIEW`/`ORIGINALITY_REVIEW` get their
+turn. This is still bounded, still not a loop: it is governed entirely by
+`agents/researcher/`'s own existing two-consecutive-attempts gate, not a
+new counter here.
 
-"Self-review" instead means: **call `run_full_pipeline` again, later,
-after something actually changed** (a human edit, a future agent). Every
-stage's own freshness/precondition check — never new code in this
-orchestrator — then determines exactly which stages are already
-satisfied (skipped for free) and which need to re-run, fully scoped to
-what actually depends on the change. See `CONTRACT.md`'s "Freshness and
-invalidation" and "Self-review behavior" for the full reasoning, and
-`tests/test_integration.py`'s downstream-invalidation test for proof.
+For every other stage, "self-review" still means: **call
+`run_full_pipeline` again, later, after something actually changed** (a
+human edit, a future agent). Every stage's own freshness/precondition
+check — never new code in this orchestrator — then determines exactly
+which stages are already satisfied (skipped for free) and which need to
+re-run, fully scoped to what actually depends on the change. See
+`CONTRACT.md`'s "Freshness and invalidation" and "Self-review behavior"
+for the full reasoning, and `tests/test_integration.py`'s
+downstream-invalidation test for proof.
 
 ## Result model
 
@@ -85,8 +95,11 @@ and every production agent's real `run_*` entry point directly — never
 reimplements any of their algorithms, hashing, or write paths. Reuses
 `agents.researcher.src.loader.load_content_item` for the read-only
 approval-gate check (already-generic infrastructure, not new domain
-logic). No agent requires this orchestrator to exist; each remains fully
-usable standalone, exactly as before this phase.
+logic). Also calls `agents.researcher.src.pipeline.run_fact_check` and
+`agents.researcher.src.revision.run_autonomous_revision` directly (Phase
+7F) for the one bounded revision-and-recheck extension described above —
+never reimplements either. No agent requires this orchestrator to exist;
+each remains fully usable standalone, exactly as before this phase.
 
 ## Running it
 
@@ -100,10 +113,16 @@ python3 -m unittest discover -s agents/full_pipeline/tests -t .
 
 ## Known limitations
 
-- No in-process retry loop — see "Self-review — what it actually is."
-  This is a deliberate architectural finding, not an oversight: looping
-  with unchanged inputs would either no-op or actively burn down a review
+- No in-process retry loop for production stages, `SAFETY_REVIEW`, or
+  `ORIGINALITY_REVIEW` — see "Self-review — what it actually is." This is
+  a deliberate architectural finding, not an oversight: looping with
+  unchanged inputs would either no-op or actively burn down a review
   agent's two-consecutive-attempts budget for no benefit.
+- Autonomous revision (Phase 7F) only ever applies to `FACT_CHECK`, and
+  only ever closes a real, already-existing evidence-linkage gap — never
+  a wording or classification correction, and never anything for
+  `SAFETY_REVIEW`/`ORIGINALITY_REVIEW`. See
+  `agents/researcher/CONTRACT.md`'s "Autonomous Revision Mode".
 - No new persisted artifact type — a full pipeline run's result is never
   written to disk by this orchestrator; only the underlying agents'
   existing outputs are.
@@ -113,4 +132,5 @@ python3 -m unittest discover -s agents/full_pipeline/tests -t .
 - Inherits every underlying agent's own documented limitations
   unchanged (no real TTS/rendering/image-generation, `RETRIEVED`-strategy
   assets can never pass Production QA this phase, no versioned
-  supersession, etc. — see each agent's own README.md).
+  supersession for production artifacts, etc. — see each agent's own
+  README.md).

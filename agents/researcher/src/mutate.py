@@ -27,6 +27,27 @@ CLAIM_WRITABLE_FIELDS = {
     "Confidence level",
 }
 
+_REVISION_FILENAME_RE = re.compile(r"^revision-\d+\.md$")
+
+
+def write_revision_file(root: Path, filename: str, text: str) -> Path:
+    """Autonomous Revision Mode's one new write path (see
+    agents/researcher/CONTRACT.md's "Autonomous Revision Mode" — "Revision
+    authority"). Only `revisions/revision-<n>.md` is permitted — fails
+    closed on anything else, matching every other whitelisted writer in
+    this module and every sibling agent's own mutate.py.
+    """
+    if not _REVISION_FILENAME_RE.match(filename):
+        raise PermissionError(
+            f"agents/researcher may not write revision file {filename!r} — "
+            "only revision-<n>.md is permitted"
+        )
+    revisions_dir = root / "revisions"
+    revisions_dir.mkdir(exist_ok=True)
+    path = revisions_dir / filename
+    path.write_text(text, encoding="utf-8")
+    return path
+
 
 def _replace_table_field(text: str, field_name: str, new_value: str) -> str:
     pattern = re.compile(

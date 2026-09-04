@@ -65,11 +65,15 @@ class LaterStagesNotExecutedTests(unittest.TestCase):
             self.assertIn(stage, result.completed_stages)
 
     def test_content_review_block_prevents_every_production_stage(self):
-        from ...orchestrator.tests.builders import write_claim, write_content_item, write_research, write_script
+        from ...orchestrator.tests.builders import write_claim, write_content_item, write_script
 
+        # No research exists anywhere -> genuinely Case C (insufficient
+        # evidence per agents/researcher/CONTRACT.md's "Autonomous
+        # Revision Mode"), unfixable by Phase 7F's revision engine too —
+        # this test's point is that REVISION_REQUIRED correctly blocks
+        # every production stage, not that nothing could ever fix it.
         self.root.mkdir(parents=True)
         write_content_item(self.root)
-        write_research(self.root)
         write_claim(self.root, "c1", supporting_sources="`N/A`")
         write_script(self.root)
 

@@ -31,7 +31,21 @@ def _is_empty_or_none_found(text: str) -> bool:
     return t in ("", "n/a", "none found", "none found.")
 
 
-def _evaluate_fact(claim: Claim, bundle: ContentBundle) -> tuple[EvidenceSupport, str]:
+def _evaluate_fact(
+    claim: Claim, bundle: ContentBundle, predecessor_short_id: str | None = None,
+) -> tuple[EvidenceSupport, str]:
+    """`predecessor_short_id` (Autonomous Revision Mode's one extension
+    point — see agents/researcher/src/revision.py) lets a just-created
+    successor claim's reciprocal check also accept a research entry that
+    names the claim it superseded. A research entry's own `Related
+    claims` field is itself immutable once written (CONTRACT.md's
+    Forbidden actions), so it still, correctly, names the predecessor —
+    never the successor. Since the successor's `Exact claim` text is
+    always byte-identical to the predecessor's (this engine never
+    rewords a claim), a source that already, truthfully confirmed the
+    predecessor's assertion is equally valid evidence for the successor.
+    `None` (every call site before Phase 7F) reproduces prior behavior.
+    """
     if not _is_empty_or_none_found(claim.contradictory_evidence):
         return (
             EvidenceSupport.CONTRADICTED,
@@ -55,7 +69,9 @@ def _evaluate_fact(claim: Claim, bundle: ContentBundle) -> tuple[EvidenceSupport
             missing_refs.append(ref)
             continue
         existing.append(entry)
-        if claim.short_id in entry.related_claims:
+        if claim.short_id in entry.related_claims or (
+            predecessor_short_id is not None and predecessor_short_id in entry.related_claims
+        ):
             confirmed.append(entry)
         else:
             unconfirmed.append(entry)
@@ -107,10 +123,14 @@ def _evaluate_inference_or_speculation(
     return EvidenceSupport.SUPPORTED, "all Derived from claims found and not FALSE/DISPUTED"
 
 
-def evaluate_claim(claim: Claim, bundle: ContentBundle) -> ClaimEvaluation:
+def evaluate_claim(
+    claim: Claim, bundle: ContentBundle, predecessor_short_id: str | None = None,
+) -> ClaimEvaluation:
     """Compute EvidenceSupport and the resulting FactCheckStatus for one
     claim. Never touches claim.classification — that field is read-only
-    here (CONTRACT.md Forbidden actions).
+    here (CONTRACT.md Forbidden actions). `predecessor_short_id` — see
+    _evaluate_fact's docstring; only ever set by Autonomous Revision
+    Mode when re-verifying a just-created successor claim.
     """
     if claim.fact_check_status is FactCheckStatus.FALSE:
         # A prior FALSE is sticky: clearing it needs a human/editorial
@@ -151,7 +171,7 @@ def evaluate_claim(claim: Claim, bundle: ContentBundle) -> ClaimEvaluation:
         )
 
     # FACT
-    support, reason = _evaluate_fact(claim, bundle)
+    support, reason = _evaluate_fact(claim, bundle, predecessor_short_id)
     if support is EvidenceSupport.CONTRADICTED:
         # Never auto-FALSE: that needs stronger judgment than this MVP
         # applies automatically (CONTRACT.md Fact-check statuses).

@@ -19,10 +19,12 @@ A faceless content channel project built around four equal content pillars:
   content is built from (idea → research → script → review → QA →
   publication → learning), plus the production-record schema
   (`PRODUCTION.md`/`SCENE.md`/`ASSET.md`/`VOICE.md`/`TIMELINE.md`/
-  `CAPTIONS.md`/`THUMBNAIL.md`/`PRODUCTION_QA.md`)
+  `CAPTIONS.md`/`THUMBNAIL.md`/`PRODUCTION_QA.md`) and the claim-revision
+  record schema (`REVISION.md`)
 - [`agents/`](./agents/) — agent contracts and working MVP
   implementations: three independent review agents (Research/Fact-Check,
-  Safety Reviewer, Originality Reviewer) plus a thin orchestrator that
+  Safety Reviewer, Originality Reviewer — the first also has a narrow
+  **Autonomous Revision Mode**, see below) plus a thin orchestrator that
   runs them in order; eight production agents (Producer, Voice,
   Visual Planner, Assets, Assembler, Captions, Thumbnail, Production QA)
   that turn an approved script all the way through to a human-review-ready
@@ -86,4 +88,21 @@ re-invoking the same call after something changes out of band, relying
 entirely on each stage's own already-existing freshness check to
 determine exactly what needs to re-run. `COMPLETE` (Production QA
 `PASS`, `Production status = HUMAN_REVIEW`) is the highest outcome it may
-ever report. See `STATE.md` for what's next.
+ever report.
+
+**Phase 7F complete: Autonomous Revision Engine (Research/Fact-Check).**
+`agents/researcher/src/revision.py` adds one narrow, deterministically
+safe autonomous-fix capability: when a `FACT_CHECKER` attempt is
+`REVISION_REQUIRED`, it looks for a `FACT` claim whose evidence gap can
+be closed with *already-existing, already-recorded* research — never
+invented — and, if one exists, creates a new **successor claim** (never
+editing the original, whose table stays byte-identical forever) citing
+it. `agents/full_pipeline/` recognizes this and, when it applies, runs
+one more `FACT_CHECKER` attempt plus a fresh content-review pass so
+`SAFETY_REVIEW`/`ORIGINALITY_REVIEW` get their turn — bounded entirely by
+the existing two-consecutive-attempts rule, never a new retry system.
+Three concepts stay deliberately separate and always will: **automated
+review** (an AI evaluates), **autonomous revision** (an AI may create a
+controlled successor artifact when it's safe to), and **human approval**
+(a human decides). A revision `PASS` never means `APPROVED`. See
+`STATE.md` for what's next.

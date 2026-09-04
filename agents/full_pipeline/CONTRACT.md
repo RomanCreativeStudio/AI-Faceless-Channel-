@@ -213,28 +213,43 @@ so this orchestrator deliberately has none.
 
 ## Self-review behavior
 
-**Genuine finding, verified against every agent's actual contract before
-writing any code (not assumed): no agent in this codebase — none of the
-eleven coordinated here — has authority to autonomously regenerate,
-overwrite, or fix an existing artifact once written.** Every production
-agent's own `CONTRACT.md` documents this as "no versioned supersession":
-a stale or QA-failing artifact is reported and left untouched,
-permanently, until a human (or a not-yet-built future agent) changes the
-underlying input out of band. `templates/REVIEW.md` rule 5 permits an
-agent to "fix and create the next attempt" autonomously for
-`REVISION_REQUIRED` — but nothing in `agents/researcher/`,
-`agents/safety/`, or `agents/originality/` implements the "fix" half of
-that (no `RESEARCH`-mode implementation exists this phase per
-`SYSTEM.md`'s "Out of scope"); only a human editing `SCRIPT.md`/`claims/`
-and re-invoking the same stage constitutes a "fix" today.
+**Genuine finding from Phase 7E, verified against every agent's actual
+contract before writing any code (not assumed): no *production* agent in
+this codebase has authority to autonomously regenerate, overwrite, or fix
+an existing artifact once written.** Every production agent's own
+`CONTRACT.md` documents this as "no versioned supersession": a stale or
+QA-failing artifact is reported and left untouched, permanently, until a
+human (or a not-yet-built future agent) changes the underlying input out
+of band. That finding still holds for all eight production stages,
+unchanged.
 
-Given that, **this orchestrator invokes every stage's own `run_*` at most
-once per call, and never loops in-process.** Immediately re-invoking a
-stage with unchanged inputs would either be a wasted no-op (production
-stages, whose own precondition would just report `already_up_to_date`
-with the *same* unresolved issue still blocking `Production status`), or
-actively harmful for the three review stages (creating a second,
-identical-verdict `reviews/<role>-2.md` attempt purely to burn down the
+**Phase 7F changes this for exactly one stage: `CONTENT_REVIEW`'s
+`FACT_CHECK` sub-stage.** `agents/researcher/`'s Autonomous Revision Mode
+(`src/revision.py`) is a genuine, narrow autonomous-fix capability —
+`templates/REVIEW.md` rule 5's "fix and create the next attempt," finally
+implemented, for the one case where a fix is deterministically safe:
+closing an evidence-*linkage* gap with already-existing, already-recorded
+research. `agents/safety/` and `agents/originality/` still have no fix
+capability at all (no `RESEARCH`-mode live retrieval exists either, so
+even `agents/researcher/`'s own fix is bounded to what's already on
+disk). See `agents/researcher/CONTRACT.md`'s "Autonomous Revision Mode"
+for the full contract this orchestrator defers to entirely — it
+reimplements none of it.
+
+Given that, **this orchestrator still invokes every stage's own `run_*`
+at most once per call, and still never loops in-process** — the one
+exception is `_attempt_researcher_revision`, which is not a loop but a
+single, bounded, two-step extension of the CONTENT_REVIEW super-stage
+itself (attempt 1 -> diagnose -> permitted successor -> attempt 2),
+mirroring exactly the shape `agents/researcher/`'s own
+`run_fact_check_with_autonomous_revision` already uses, never a second
+implementation of it. Every other stage's reasoning is unchanged:
+immediately re-invoking a stage with unchanged inputs would either be a
+wasted no-op (production stages, whose own precondition would just
+report `already_up_to_date` with the *same* unresolved issue still
+blocking `Production status`), or actively harmful for `SAFETY_REVIEW`/
+`ORIGINALITY_REVIEW` specifically (creating a second, identical-verdict
+`reviews/<role>-2.md` attempt purely to burn down the
 two-consecutive-attempts budget faster, with no actual fix behind it —
 exactly the kind of fabricated, valueless action `CONTRACT.md`'s
 Forbidden-actions list below rules out in spirit even where not named
@@ -244,10 +259,22 @@ explicitly). So the self-review loop this phase is:
 2. Inspect its normalized outcome.
 3. `PASS` (fresh or already-up-to-date) -> continue to the next stage.
 4. `REVISION_REQUIRED` / `BLOCKED` / `STALE` -> check whether *this
-   orchestrator* has any explicitly permitted autonomous fix for it. It
-   never does, this phase (see finding above) — the permitted-fix table
-   this orchestrator consults is deliberately empty. Stop.
-5. Report `human_action_required = True` with the exact stage and reason.
+   orchestrator* has any explicitly permitted autonomous fix for it. For
+   every stage except `CONTENT_REVIEW` failing specifically at
+   `FACT_CHECK`, it never does (see finding above) — the permitted-fix
+   table this orchestrator consults is deliberately near-empty, with one
+   entry. For `CONTENT_REVIEW`/`FACT_CHECK`: invoke
+   `agents.researcher.src.revision.run_autonomous_revision` against the
+   attempt `CONTENT_REVIEW` just produced (never re-running fact-check
+   redundantly); if it creates at least one successor claim, run one more
+   `FACT_CHECKER` attempt evaluating the successor
+   (`run_fact_check(..., claim_substitutions=...)`), then re-run the
+   whole content-review chain once more so `SAFETY_REVIEW`/
+   `ORIGINALITY_REVIEW` get their turn if `FACT_CHECK` now passes. If
+   revision produces nothing (no fixable claim, blocked, or a dry run),
+   this reduces to the same "Stop" step 5 already describes.
+5. Report `human_action_required = True` with the exact stage and reason
+   — whether or not step 4's one fix attempt applied.
 6. **The loop resumes correctly on the *next separate call*** to
    `run_full_pipeline`, once a human (or a future agent) has actually
    changed something: each stage's own freshness/precondition check
@@ -260,9 +287,14 @@ explicitly). So the self-review loop this phase is:
    orchestrator-level invalidation code.
 
 `MAX_STAGE_ATTEMPTS = 1` is documented in `src/pipeline.py` as an
-explicit, enforced constant for exactly this reason — not a placeholder
-for a future in-process retry loop, a permanent architectural fact about
-what this codebase's agents can and cannot do autonomously.
+explicit, enforced constant for every stage's own single `run_*`
+invocation — including `FACT_CHECK`'s first attempt. The one bounded,
+two-step extension `_attempt_researcher_revision` performs (diagnose,
+then one more `FACT_CHECKER` attempt) belongs to `CONTENT_REVIEW`'s own
+internal accounting, not a second invocation of `FACT_CHECK` as a
+top-level stage — and it is itself bounded by `agents/researcher/`'s own
+two-consecutive-`REVISION_REQUIRED` gate (reused, never reimplemented),
+so it can never loop either.
 
 ## Retry / escalation policy
 
@@ -272,7 +304,11 @@ what this codebase's agents can and cannot do autonomously.
   rule (`templates/REVIEW.md` Multi-pass resolution rule 5) and
   REJECT-is-terminal rule (rule 3). This orchestrator surfaces whatever
   `OrchestratorResult` it gets back; it does not reimplement or extend
-  either rule.
+  either rule. When `FACT_CHECK` specifically is the blocking stage, one
+  additional `agents/researcher/`-owned attempt is possible via
+  Autonomous Revision Mode — still governed entirely by that same
+  two-consecutive rule (`agents/researcher/CONTRACT.md`'s "Retry
+  limits"), never a separate counter here.
 - **Production stages**: exactly one attempt per call
   (`MAX_STAGE_ATTEMPTS = 1`), for the reasons above. A `BLOCKED`/`STALE`
   result is immediately terminal for this call and reported as requiring
@@ -368,7 +404,15 @@ including this one, has ever been permitted to touch.
 - Regenerate, overwrite, or delete any existing artifact any invoked
   agent has already written — see "Self-review behavior."
 - Retry a stage more than `MAX_STAGE_ATTEMPTS` (1) times within a single
-  call, or loop indefinitely under any circumstance.
+  call, or loop indefinitely under any circumstance — `CONTENT_REVIEW`'s
+  own bounded revision-and-recheck extension (see "Self-review behavior")
+  is governed by `agents/researcher/`'s own two-consecutive-attempts gate,
+  not a second counter here, and can itself never loop.
+- Create or approve a successor claim's content itself — every write
+  under Autonomous Revision Mode is performed by
+  `agents/researcher/src/revision.py` through its own existing,
+  already-tested path; this orchestrator only decides *whether* to invoke
+  it, never what it writes.
 - Reimplement any agent's own domain logic (evidence evaluation, signal
   detection, scene/timeline construction, caption segmentation,
   thumbnail framing, QA checks) — it only ever calls the real function.
