@@ -19,6 +19,49 @@ SCENE → VISUAL REQUIREMENT → ASSET STRATEGY (GENERATED | RETRIEVED |
 HUMAN_PROVIDED) → PROVENANCE → AUTHENTICITY → ASSET QA → READY FOR ASSEMBLY
 ```
 
+## Real providers (Phase 8)
+
+`agents/assets/src/real_providers.py` adds the first two production-
+capable providers, both second implementations of `provider.py`'s
+existing `GeneratedAssetProvider`/`AssetRetrievalProvider` Protocols —
+nothing in `pipeline.py` needed to change to add them.
+
+- **`GeneratedAssetProviderReal`** — a deterministic, fully offline
+  illustration renderer (`illustration.py`, Pillow-based: gradient +
+  abstract geometric motif, never photorealistic). No network, no
+  external model, no API key. Always burns in an "AI-GENERATED
+  RECONSTRUCTION" watermark. Used for scene assets with
+  `draw_caption=False` — the scene's real narration is already captioned,
+  in sync, by the video renderer's own subtitle burn-in
+  (`agents/assembler/`), so the illustration itself carries no
+  competing/colliding caption text (a real Phase 8 bug, found and fixed —
+  see STATE.md).
+- **`WikimediaCommonsRetrievalProvider`** — queries Wikimedia Commons'
+  public search API (no API key/authentication) for a freely-licensed
+  image, downloads it, and records the real source, URL, and license text
+  Wikimedia itself reports. `Licensing/provenance status` reflects only a
+  structural read of that license text (public-domain/CC-BY/GFDL keyword
+  matching) — never a claim of legal review; `Verification status` always
+  stays `NOT_STARTED` regardless (a human still confirms it). Retries a
+  429/5xx with backoff (a public, shared, rate-limited API is expected to
+  need this); on any failure returns a structured `RETRIEVAL_FAILED` —
+  never fabricates a source, license, or successful download.
+
+`pipeline.py`'s prompt derivation also changed: it now prefers the
+scene's own narration text over `agents/visual_planner/`'s
+`visual_description`, which is a **fixed boilerplate string per
+authenticity bucket**, never scene-specific — harmless when `GENERATED`
+meant "write a placeholder" and `RETRIEVED` meant
+`RETRIEVAL_NOT_IMPLEMENTED` regardless of the prompt, but a real defect
+now that a real provider acts on it. See `pipeline.py`'s own comment.
+
+`agents/assets/src/qa.py`'s structural check for `RETRIEVED` assets was
+also corrected: it previously flagged *any* source URL on a `RETRIEVED`
+asset as suspicious (true before Phase 8, when no real retrieval
+existed); it now requires a source URL *and* a retrieved artifact file
+specifically when `generation_status == RETRIEVED` — the genuinely
+correct, expected shape of a real successful retrieval.
+
 ## Relationship to `agents/visual_planner/`
 
 `agents/visual_planner/` already creates `assets/asset-<n>.md` skeletons

@@ -18,6 +18,14 @@ class GeneratedAudio:
     artifact_content: str  # text content to persist as the audio artifact reference
     duration_seconds: int
     is_placeholder: bool  # True for any non-production-quality output
+    # Phase 8 additions — both optional/defaulted so every existing
+    # (placeholder/text) provider keeps working unchanged. A real provider
+    # sets artifact_bytes to genuine binary audio data and artifact_extension
+    # to its real container format ("wav", "mp3", ...); pipeline.py/mutate.py
+    # persist whichever of artifact_content/artifact_bytes is actually set —
+    # see mutate.write_audio_artifact/write_audio_artifact_binary.
+    artifact_bytes: bytes | None = None
+    artifact_extension: str = "audio.txt"
 
 
 class VoiceProvider(Protocol):

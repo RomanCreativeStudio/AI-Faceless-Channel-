@@ -97,7 +97,7 @@ class AssetQATests(unittest.TestCase):
         )
         passed, reasons = evaluate_asset_qa(plan, known_claim_ids={"c1"})
         self.assertFalse(passed)
-        self.assertTrue(any("no real retrieval" in r for r in reasons))
+        self.assertTrue(any("generation status not being RETRIEVED" in r for r in reasons))
 
 
 if __name__ == "__main__":

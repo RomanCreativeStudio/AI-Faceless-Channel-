@@ -45,6 +45,18 @@ Historical authenticity classification>`
 `<provider used, and an explicit note that output is a placeholder
 specification, not a real generated image>`
 
+## Rendered image
+
+Added Phase 8 — optional, additive: a thumbnail *specification* remains
+this agent's primary output (see above), but a real, deterministically-
+rendered illustration may also exist. `NOT_RENDERED` for a spec-only run
+(this template's original, pre-Phase-8 behavior — nothing here changes
+for that case).
+
+| Field | Value |
+|---|---|
+| Reference | `<file path once rendered, or "NOT_RENDERED">` |
+
 ## Thumbnail status
 
 `NOT_STARTED` \| `IN_PROGRESS` \| `GENERATED` \| `REVISION_REQUIRED`

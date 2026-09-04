@@ -32,6 +32,24 @@ class ThumbnailPipelineTests(unittest.TestCase):
         self.assertIsNotNone(result.spec)
         self.assertTrue(result.spec.title_concept)
 
+    # --- Phase 8: real thumbnail image, opt-in ---
+    def test_render_image_true_writes_a_real_png_and_records_its_reference(self):
+        build_thumbnail_ready_item(self.root)
+        result = run_thumbnail_generation(self.root, apply=True, render_image=True)
+        self.assertTrue(result.produced)
+        self.assertEqual(result.image_reference, "thumbnail/thumbnail-01.png")
+        image_path = self.root / "thumbnail" / "thumbnail-01.png"
+        self.assertTrue(image_path.is_file())
+        self.assertTrue(image_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
+        thumbnail_text = (self.root / "thumbnail" / "thumbnail-01.md").read_text(encoding="utf-8")
+        self.assertIn("thumbnail/thumbnail-01.png", thumbnail_text)
+
+    def test_render_image_false_default_never_writes_an_image(self):
+        build_thumbnail_ready_item(self.root)
+        result = run_thumbnail_generation(self.root, apply=True)
+        self.assertEqual(result.image_reference, "NOT_RENDERED")
+        self.assertFalse((self.root / "thumbnail" / "thumbnail-01.png").exists())
+
     def test_unapproved_content_blocks(self):
         from ...producer.tests.builders import build_minimal_item
         build_minimal_item(self.root, status="SCRIPT")

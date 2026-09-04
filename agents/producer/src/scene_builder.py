@@ -44,9 +44,26 @@ def _extract_beats(narrative_beats_body: str) -> list[str]:
 
 
 def _clean_beat_text(text: str) -> str:
-    """Strips only markdown bold syntax (formatting, not content) — the
-    underlying words are left exactly as written in SCRIPT.md."""
-    return text.replace("**", "").strip(" —").strip()
+    """Strips only markdown bold syntax (formatting, not content) and
+    collapses whitespace (a SCRIPT.md author may hard-wrap a long beat or
+    Hook across multiple source lines for readability, per this repo's
+    own established style) — the underlying words are left exactly as
+    written in SCRIPT.md, never paraphrased. Whitespace collapsing is
+    required, not cosmetic: an embedded newline persisted verbatim into a
+    scene file's own `| Narration text | ... |` table cell corrupts that
+    markdown table (a cell cannot span lines) — this is the same
+    "formatting only, never content" transformation
+    agents/voice/src/narration.py's own PROVIDER-READY NARRATION step
+    already applies for the identical reason, one stage later.
+    """
+    cleaned = text.replace("**", "").strip(" —").strip()
+    return _collapse_whitespace(cleaned)
+
+
+def _collapse_whitespace(text: str) -> str:
+    """Formatting only, never content — see _clean_beat_text's docstring
+    for why this is required, not cosmetic."""
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def _build_scene(
@@ -103,7 +120,7 @@ def build_scenes(
     order = 1
 
     if hook and not hook.upper().startswith("N/A"):
-        hook_text = parsing.strip_single_backticks(hook)
+        hook_text = _collapse_whitespace(parsing.strip_single_backticks(hook))
         scenes.append(
             _build_scene(order, content_id, "SCRIPT.md Hook", hook_text, [], claims, words_per_minute)
         )

@@ -55,7 +55,14 @@ class AssetPlan:
     verification_notes: str
     content_hash: str
     artifact_filename: str = ""  # only for GENERATED strategy
-    artifact_content: str = ""  # only for GENERATED strategy, written at apply time
+    artifact_content: str = ""  # only for GENERATED strategy (text/placeholder), written at apply time
+    # Phase 8 additions — all optional/defaulted so every pre-Phase-8 code
+    # path (placeholder providers, HUMAN_PROVIDED) is unaffected.
+    artifact_bytes: bytes | None = None  # GENERATED strategy, real binary image, written at apply time
+    licensing_status: str = "UNVERIFIED"  # templates/ASSET.md's Licensing/provenance status vocabulary
+    license_notes: str = "not yet checked — see Verification status below"
+    retrieved_artifact_filename: str = ""  # only for RETRIEVED strategy, a real successful retrieval
+    retrieved_artifact_bytes: bytes | None = None
 
 
 @dataclass

@@ -253,10 +253,13 @@ def run_video_assembly(
             )
 
     active_renderer = renderer or LocalTestVideoRenderer()
-    render_result = active_renderer.render(scene_entries, total_duration)
-    output_filename = "video-01.manifest.txt"
+    render_result = active_renderer.render(scene_entries, total_duration, root)
+    output_filename = f"video-01.{render_result.format}"
     output_reference = f"output/{output_filename}"
-    output_hash = hashlib.sha256(render_result.artifact_content.encode("utf-8")).hexdigest()
+    output_hash = hashlib.sha256(
+        render_result.artifact_bytes if render_result.artifact_bytes is not None
+        else render_result.artifact_content.encode("utf-8")
+    ).hexdigest()
 
     result = AssemblyResult(
         content_id=content_id, production_id=production_id, timeline_id=timeline_id, filename=filename,
@@ -267,13 +270,17 @@ def run_video_assembly(
     )
 
     if apply:
-        _apply_result(root, content_id, result, render_result.artifact_content, production_text)
+        _apply_result(root, content_id, result, render_result, production_text)
 
     return result
 
 
-def _apply_result(root: Path, content_id: str, result: AssemblyResult, artifact_content: str, production_text: str) -> None:
-    output_path = mutate.write_output_artifact(root, "video-01.manifest.txt", artifact_content)
+def _apply_result(root: Path, content_id: str, result: AssemblyResult, render_result, production_text: str) -> None:
+    output_filename = f"video-01.{render_result.format}"
+    if render_result.artifact_bytes is not None:
+        output_path = mutate.write_output_artifact_binary(root, output_filename, render_result.artifact_bytes)
+    else:
+        output_path = mutate.write_output_artifact(root, output_filename, render_result.artifact_content)
     timeline_text = render_timeline_markdown(result, content_id)
     timeline_path = mutate.write_timeline_file(root, result.filename, timeline_text)
 

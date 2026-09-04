@@ -35,10 +35,22 @@ def evaluate_asset_qa(plan: AssetPlan, known_claim_ids: set[str]) -> tuple[bool,
         reasons.append(f"claim references do not resolve: {unresolved_claims}")
 
     if plan.strategy is AssetStrategy.RETRIEVED:
-        if plan.source and plan.source.startswith(("http://", "https://")):
-            reasons.append("RETRIEVED asset has a source URL despite no real retrieval integration existing")
+        # Phase 8: a real retrieval provider exists now, so
+        # generation_status == "RETRIEVED" is the *expected*, correct
+        # value for a genuine successful retrieval — never flagged on its
+        # own. What's still required, unconditionally, is real provenance
+        # to back it up: never a bare claim of "RETRIEVED" with nothing
+        # to show for it.
         if plan.generation_status == "RETRIEVED":
-            reasons.append("RETRIEVED strategy must not claim generation status RETRIEVED without a real retrieval")
+            if plan.source_url == "N/A" or not plan.source_url.strip():
+                reasons.append("RETRIEVED asset claims generation status RETRIEVED but has no source URL recorded")
+            if not plan.retrieved_artifact_filename:
+                reasons.append("RETRIEVED asset claims generation status RETRIEVED but has no retrieved artifact file recorded")
+        elif plan.source and plan.source.startswith(("http://", "https://")):
+            reasons.append(
+                "RETRIEVED asset has a source URL despite generation status not being "
+                "RETRIEVED — a URL is only ever recorded once a real retrieval actually succeeded"
+            )
 
     if plan.strategy is AssetStrategy.GENERATED:
         if not plan.artifact_filename:

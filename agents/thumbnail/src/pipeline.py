@@ -24,8 +24,13 @@ ALLOWED_PRODUCTION_STATUSES = {"THUMBNAIL", NEXT_PRODUCTION_STATUS}
 
 
 def run_thumbnail_generation(
-    root: Path, apply: bool = False, provider: ThumbnailProvider | None = None
+    root: Path, apply: bool = False, provider: ThumbnailProvider | None = None,
+    render_image: bool = False,
 ) -> ThumbnailResult:
+    """`render_image=True` (Phase 8) additionally renders a real PNG from
+    the spec this function already produces — see
+    agents/thumbnail/src/real_provider.py. Default False preserves this
+    function's original, pre-Phase-8 spec-only behavior exactly."""
     def _empty(**overrides) -> ThumbnailResult:
         base = dict(
             content_id="", production_id="", thumbnail_id="", filename="", spec=None,
@@ -201,12 +206,20 @@ def run_thumbnail_generation(
     spec = active_provider.generate_spec(working_title, premise, hedge_required, authenticity_summary)
     generation_strategy = f"{active_provider.label} — {PLACEHOLDER_NOTE}"
 
+    image_bytes = None
+    image_reference = "NOT_RENDERED"
+    if render_image:
+        from .real_provider import render_thumbnail_image
+        image_bytes = render_thumbnail_image(spec)
+        image_reference = f"thumbnail/{filename[:-3]}.png"
+
     result = ThumbnailResult(
         content_id=content_id, production_id=production_id, thumbnail_id=thumbnail_id,
         filename=filename, spec=spec, claim_theme_relationship=claim_theme_relationship,
         authenticity_considerations=authenticity_considerations, generation_strategy=generation_strategy,
         thumbnail_content_hash=thumbnail_content_hash, thumbnail_status="GENERATED",
-        reasons=["generated thumbnail spec"],
+        reasons=["generated thumbnail spec"] + (["rendered a real thumbnail image"] if render_image else []),
+        image_reference=image_reference, image_bytes=image_bytes,
     )
 
     if apply:
@@ -218,6 +231,8 @@ def run_thumbnail_generation(
 def _apply_result(
     root: Path, content_id: str, result: ThumbnailResult, working_title: str, production_text: str
 ) -> None:
+    if result.image_bytes is not None:
+        mutate.write_thumbnail_image(root, f"{result.filename[:-3]}.png", result.image_bytes)
     thumbnail_text = render_thumbnail_markdown(result, content_id)
     thumbnail_path = mutate.write_thumbnail_file(root, result.filename, thumbnail_text)
 

@@ -35,6 +35,23 @@ produces a specification only — never a real generated image. A future
 real image-generation integration is a second implementation; nothing in
 `pipeline.py` needs to change to add one.
 
+## Real thumbnail image (Phase 8, optional)
+
+`run_thumbnail_generation(..., render_image=True)` — default `False`,
+preserving the original spec-only behavior exactly — additionally renders
+a real PNG from the already-produced `ThumbnailSpec` via
+`agents/thumbnail/src/real_provider.py`'s `render_thumbnail_image`, which
+directly reuses `agents/assets/src/illustration.py`'s generic, offline,
+deterministic renderer (this agent already imports
+`agents/assets/src`'s generic scene-reading helpers, so reusing this
+equally generic rendering helper is consistent with that existing
+sibling-agent boundary). Never generates its own title/visual concept —
+it only renders what the spec already says. `templates/THUMBNAIL.md`
+gained one small additive section, `## Rendered image` (`Reference` field,
+`NOT_RENDERED` unless `render_image=True`) — the spec itself is
+unchanged. The image is written via a new whitelisted writer
+(`mutate.write_thumbnail_image`, `thumbnail/thumbnail-<n>.png` only).
+
 ## Hash / staleness
 
 `Thumbnail content hash` = sha256 of `Working title` + content pillar +

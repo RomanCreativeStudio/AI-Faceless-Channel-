@@ -124,4 +124,27 @@ claims, never up. Only a deterministic, no-network
 `LocalTestResearchProvider` exists today; a real provider is a distinct,
 deliberate follow-up. `agents/full_pipeline/` needed no control-flow
 change — it already called the unmodified function this now lives
-inside. See `STATE.md` for what's next.
+inside.
+
+**Phase 8 complete: Real Episode 1 Production.** Four production agents
+(`agents/voice/`, `agents/assets/`, `agents/assembler/`,
+`agents/thumbnail/`) gained their first real, non-placeholder provider —
+real offline speech synthesis (ffmpeg's `flite` filter), a real
+deterministic illustration renderer plus real Wikimedia Commons
+retrieval, a real ffmpeg H.264/AAC video renderer with burned-in
+captions, and an optional real thumbnail image — each a second
+implementation of that agent's own pre-existing provider interface, so no
+agent's pipeline needed a redesign. `Pillow` and `ffmpeg` are this
+project's first non-stdlib dependencies (`requirements.txt`), added only
+because Phase 8's actual task — real media production — genuinely needed
+them. Episode 1 ("What If Modern Medicine Existed During the Black
+Death?") is a real, independent content item at
+`content/what-if/wi-20260904-black-death-modern-medicine-ep1/` (never the
+schema/engineering golden sample, which remains untouched) — real
+narration, real illustrated/retrieved visuals, a real captioned MP4, and
+a real thumbnail were produced and manually inspected end to end. The
+human approval gate was never bypassed: the canonical episode's
+`CONTENT_ITEM.md` status was never set to `APPROVED` by this system, and
+production validation used an isolated, throwaway copy — see `STATE.md`
+for the full report, what's genuinely still blocking full automated
+`FACT_CHECK` `PASS`, and what's next.

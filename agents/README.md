@@ -426,3 +426,39 @@ coordinated agents through its own existing, already-tested path.
 `PASS`) is the highest outcome it may ever report — nothing in this
 orchestrator, or any agent it coordinates, can reach `APPROVED` or
 `READY_TO_PUBLISH`.
+
+## Phase 8: real production providers
+
+Four production agents gained their first real (non-placeholder)
+provider — each a second implementation of that agent's own pre-existing
+Protocol, so no agent's `pipeline.py` needed a redesign:
+
+- **`agents/voice/`** — `FliteVoiceProvider` (`real_provider.py`): real
+  speech via ffmpeg's built-in, offline `flite` filter. No API key, no
+  network, no cloud vendor — see `agents/voice/README.md`.
+- **`agents/assets/`** — `GeneratedAssetProviderReal` (deterministic,
+  offline Pillow illustration renderer, `illustration.py`) and
+  `WikimediaCommonsRetrievalProvider` (real, freely-licensed image
+  retrieval, no API key) — see `agents/assets/README.md`.
+- **`agents/assembler/`** — `FFmpegVideoRenderer` (`real_provider.py`):
+  a real H.264/AAC MP4, real narration, real captions burned in, `Playable`
+  independently verified via `ffprobe` — see `agents/assembler/README.md`.
+- **`agents/thumbnail/`** — an optional real image render
+  (`render_image=True`) of the agent's existing spec, reusing
+  `agents/assets/`'s illustration renderer — see
+  `agents/thumbnail/README.md`.
+
+Every agent's original placeholder/test provider remains its CLI's and
+its whole test suite's unchanged default — nothing about dry-run-by-
+default, the human approval gate, or any write whitelist changed. `ffmpeg`
+(with `libflite`) and `Pillow` are this project's first non-stdlib
+dependencies (`requirements.txt`) — every prior phase remained stdlib-only
+by design; Phase 8 is the first phase whose actual task (real media
+production) needed real tools to do honestly. See `STATE.md`'s Phase 8
+report for Episode 1's real production run, genuine findings (a
+whitespace/table-corruption bug in `agents/producer/`'s own scene builder,
+a caption-collision visual bug, a stale QA assumption in
+`agents/assets/src/qa.py`), and known limitations (no real
+`ResearchProvider` yet for citation-finding; the assembler/captions stage-
+order friction; Wikimedia's public API being realistically rate-limited
+in a shared sandbox).

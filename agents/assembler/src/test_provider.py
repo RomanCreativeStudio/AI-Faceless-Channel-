@@ -23,7 +23,7 @@ class LocalTestVideoRenderer:
 
     label = "local-test-video-renderer"
 
-    def render(self, scenes: list, total_duration: int) -> RenderResult:
+    def render(self, scenes: list, total_duration: int, root=None) -> RenderResult:
         lines = [
             PLACEHOLDER_LABEL,
             f"Renderer: {self.label}",

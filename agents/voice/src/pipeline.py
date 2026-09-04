@@ -182,7 +182,7 @@ def run_voice_generation(
     active_provider = provider or LocalTestVoiceProvider(words_per_minute=words_per_minute)
     generated = active_provider.generate(provider_ready_narration, voice_configuration)
 
-    prospective_audio_reference = f"voice/{filename[:-3]}.audio.txt"
+    prospective_audio_reference = f"voice/{filename[:-3]}.{generated.artifact_extension}"
     qa_passed, qa_reasons = evaluate_voice_qa(
         narration_text=source_narration,
         recorded_script_hash=current_script_hash,
@@ -214,14 +214,17 @@ def run_voice_generation(
     )
 
     if apply:
-        _apply_result(root, result, generated.artifact_content, production_text)
+        _apply_result(root, result, generated, production_text)
 
     return result
 
 
-def _apply_result(root: Path, result: VoiceResult, artifact_content: str, production_text: str) -> None:
-    audio_filename = f"{result.filename[:-3]}.audio.txt"
-    audio_path = mutate.write_audio_artifact(root, audio_filename, artifact_content)
+def _apply_result(root: Path, result: VoiceResult, generated, production_text: str) -> None:
+    audio_filename = f"{result.filename[:-3]}.{generated.artifact_extension}"
+    if generated.artifact_bytes is not None:
+        audio_path = mutate.write_audio_artifact_binary(root, audio_filename, generated.artifact_bytes)
+    else:
+        audio_path = mutate.write_audio_artifact(root, audio_filename, generated.artifact_content)
 
     voice_text = render_voice_markdown(result)
     voice_path = mutate.write_voice_file(root, result.filename, voice_text)

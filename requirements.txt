@@ -1,0 +1,16 @@
+# Phase 8 (Real Episode 1 Production) is the first phase in this project
+# to require anything beyond the Python standard library. Every prior
+# phase (1-7G) remains stdlib-only.
+#
+# Pillow — used only by agents/assets/src/illustration.py's deterministic,
+# offline illustration renderer (GENERATED_RECONSTRUCTION visual assets
+# and real thumbnail images). No network access, no external model; see
+# that module's own docstring.
+Pillow>=10.0
+
+# ffmpeg (with libflite support) is a separate, non-pip system dependency
+# required by agents/voice/src/real_provider.py (speech synthesis via the
+# flite filter) and agents/assembler/src/real_provider.py (video
+# rendering). Install via your OS package manager, e.g.:
+#   apt-get install ffmpeg
+# Verify with: ffmpeg -filters | grep flite

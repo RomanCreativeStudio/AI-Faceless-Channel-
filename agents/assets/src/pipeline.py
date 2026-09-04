@@ -250,6 +250,14 @@ def run_asset_generation(
     return result
 
 
+def _truncate_prompt(text: str, max_chars: int = 220) -> str:
+    text = text.strip()
+    if len(text) <= max_chars:
+        return text
+    truncated = text[:max_chars].rsplit(" ", 1)[0]
+    return truncated
+
+
 def _build_plan(
     scene: SceneVisualRecord,
     filename: str,
@@ -263,10 +271,34 @@ def _build_plan(
 ) -> AssetPlan:
     asset_id = f"{scene.content_id}-{filename[:-3]}"
     asset_type = "GRAPHIC" if authenticity is HistoricalAuthenticity.NOT_APPLICABLE else "IMAGE"
-    visual_prompt = scene.visual_description or scene.visual_type or "N/A"
+    # Phase 8: agents/visual_planner/'s own visual_description is a fixed
+    # boilerplate string per authenticity bucket (never scene-specific —
+    # see its classification.py), which only mattered when GENERATED
+    # meant "write a labeled placeholder" and RETRIEVED meant
+    # "RETRIEVAL_NOT_IMPLEMENTED" regardless of the prompt. Now that a
+    # real provider can act on this prompt, the scene's own narration
+    # (always scene-specific, and the only text this codebase already
+    # treats as this scene's real content — see templates/SCENE.md) is
+    # unconditionally the better source; never cross-imports
+    # visual_planner's own module or its exact boilerplate strings, so
+    # this keeps working even if that module's wording changes.
+    visual_prompt = (
+        _truncate_prompt(scene.narration_text) or scene.visual_description
+        or scene.visual_type or "N/A"
+    )
 
     if strategy is AssetStrategy.GENERATED:
         generated = generated_provider.generate(visual_prompt, asset_type)
+        verification_notes = (
+            "Not yet verified — a placeholder generated asset, not real media."
+            if generated.artifact_bytes is None
+            else (
+                "Not yet verified — a real, deterministically-rendered illustration "
+                "(never photorealistic, always labeled GENERATED_RECONSTRUCTION both "
+                "in this record and burned into the image itself); a human must still "
+                "confirm it's appropriate for this scene before use."
+            )
+        )
         return AssetPlan(
             scene=scene, asset_id=asset_id, filename=filename, asset_type=asset_type,
             strategy=strategy, authenticity=authenticity, basis=basis,
@@ -275,19 +307,45 @@ def _build_plan(
             generation_prompt=visual_prompt,
             generation_status="GENERATED",
             verification_status="NOT_STARTED",
-            verification_notes="Not yet verified — a placeholder generated asset, not real media.",
+            verification_notes=verification_notes,
             content_hash=content_hash,
-            artifact_filename=f"{filename[:-3]}.generated.txt",
+            artifact_filename=f"{filename[:-3]}.{generated.artifact_extension}",
             artifact_content=generated.artifact_content,
+            artifact_bytes=generated.artifact_bytes,
         )
 
     if strategy is AssetStrategy.RETRIEVED:
         retrieval = retrieval_provider.retrieve(visual_prompt, asset_type)
+        if retrieval.status == "RETRIEVED" and retrieval.artifact_bytes is not None:
+            retrieved_filename = f"{filename[:-3]}.retrieved.{retrieval.artifact_extension}"
+            return AssetPlan(
+                scene=scene, asset_id=asset_id, filename=filename, asset_type=asset_type,
+                strategy=strategy, authenticity=authenticity, basis=basis,
+                source=retrieval.source_reference, source_url=retrieval.source_url,
+                generation_prompt="N/A",
+                generation_status="RETRIEVED",
+                verification_status="NOT_STARTED",
+                verification_notes=(
+                    f"Retrieved from {retrieval.provider_label}; license as reported by the "
+                    f"source: {retrieval.license_text!r}. Not yet human-verified — a real "
+                    "retrieval having succeeded is never itself a claim of editorial "
+                    "appropriateness or license correctness."
+                ),
+                content_hash=content_hash,
+                licensing_status=retrieval.licensing_status,
+                license_notes=f"As reported by {retrieval.provider_label}: {retrieval.license_text}",
+                retrieved_artifact_filename=retrieved_filename,
+                retrieved_artifact_bytes=retrieval.artifact_bytes,
+            )
+        # RETRIEVAL_NOT_IMPLEMENTED (no real provider configured) or
+        # RETRIEVAL_FAILED (a real provider tried and found nothing
+        # usable) — either way, never fabricate a source or pretend a
+        # retrieval happened.
         return AssetPlan(
             scene=scene, asset_id=asset_id, filename=filename, asset_type=asset_type,
             strategy=strategy, authenticity=authenticity, basis=basis,
             source=retrieval.source_reference,
-            source_url="N/A",
+            source_url=retrieval.source_url,
             generation_prompt="N/A",
             generation_status="NOT_STARTED",
             verification_status="NOT_STARTED",
@@ -333,8 +391,18 @@ def _apply_result(
 ) -> None:
     for plan in plans:
         if plan.strategy is AssetStrategy.GENERATED and plan.artifact_filename:
-            artifact_path = mutate.write_generated_artifact(
-                root, plan.artifact_filename, plan.artifact_content
+            if plan.artifact_bytes is not None:
+                artifact_path = mutate.write_generated_artifact_binary(
+                    root, plan.artifact_filename, plan.artifact_bytes
+                )
+            else:
+                artifact_path = mutate.write_generated_artifact(
+                    root, plan.artifact_filename, plan.artifact_content
+                )
+            result.artifact_paths.append(str(artifact_path))
+        if plan.strategy is AssetStrategy.RETRIEVED and plan.retrieved_artifact_filename:
+            artifact_path = mutate.write_retrieved_artifact_binary(
+                root, plan.retrieved_artifact_filename, plan.retrieved_artifact_bytes
             )
             result.artifact_paths.append(str(artifact_path))
         asset_text = render_asset_markdown(plan, content_id)

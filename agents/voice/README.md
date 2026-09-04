@@ -48,6 +48,34 @@ container). `Generation status = GENERATED` and `QA status = PASS` mean
 this agent's own structural checks passed (see "QA" below); neither is
 ever a claim of production-quality speech.
 
+## Real provider (Phase 8)
+
+`agents/voice/src/real_provider.py`'s `FliteVoiceProvider` is the first
+production-capable `VoiceProvider` — a second implementation of
+`provider.py`'s existing interface; nothing in `pipeline.py`/`mutate.py`
+needed to change beyond two additive `GeneratedAudio` fields
+(`artifact_bytes`, `artifact_extension`) that let a real provider persist
+genuine binary audio (`voice/voice-<n>.wav`) alongside the original
+text-artifact path (`voice/voice-<n>.audio.txt`), which the test provider
+still uses unchanged.
+
+It synthesizes real, intelligible (if robotic-sounding) speech via
+**ffmpeg's own built-in `flite` filter** — fully offline, no network call,
+no API key, deterministic. This was a deliberate choice, not a default:
+this environment has no configured TTS API credentials of any kind
+(checked, never assumed), and `CONTRACT.md`'s Forbidden actions already
+rule out committing this codebase to a specific paid/keyed vendor. flite
+ships inside ffmpeg's own build (`--enable-libflite`) — the same ffmpeg
+dependency `agents/assembler/`'s real renderer already requires — so no
+additional system dependency is introduced. Fails closed with
+`VoiceProviderConfigurationError` if ffmpeg isn't installed, or
+`VoiceProviderFailure` if synthesis produces no usable audio — never
+silently substitutes a placeholder.
+
+A real cloud/paid TTS vendor remains a distinct, deliberate future
+`VoiceProvider` implementation — swapping one in requires no change to
+`pipeline.py`, `mutate.py`, or the schema, by design.
+
 ## How it works
 
 - **Approval gate** (`pipeline.py`): requires `CONTENT_ITEM.md status ==
@@ -129,10 +157,16 @@ python3 -m unittest discover -s agents/voice/tests -t .
   successor; regenerating after a script change is a decision this MVP
   surfaces, not automates (same documented limitation as
   `agents/producer/`).
-- **Placeholder audio only.** No real TTS integration exists — the
-  persisted "audio" artifact is a plain-text file describing what would
-  be spoken, never a real audio container. Swapping in a real provider is
-  the intended next step, not built this phase.
+- **Placeholder audio remains the CLI's default and every test's
+  default** — `LocalTestVoiceProvider` is what `python -m agents.voice.src`
+  and the whole test suite still use unless a real provider is passed
+  explicitly. Phase 8 added a real provider (`FliteVoiceProvider`, see
+  above); it produces genuine, if robotic-sounding, offline speech —
+  never a cloud-quality voice, and no cloud/paid TTS vendor is
+  integrated.
+- **No speech-quality QA.** `qa.py`'s checks are structural only (see
+  "QA" above) — this is unchanged by having a real provider now: a human
+  must still actually listen to the audio before it's production-ready.
 - **One voice track per production** (`voice-01` only) — matches
   `templates/VOICE.md`'s "typically one per production" design; a
   multi-track production isn't modeled yet.

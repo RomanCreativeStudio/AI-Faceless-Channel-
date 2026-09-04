@@ -13,6 +13,13 @@ from .models import VoiceResult
 def render_voice_markdown(result: VoiceResult, today: date | None = None) -> str:
     today = today or datetime.now(timezone.utc).date()
     qa_notes = "; ".join(result.qa_reasons) if result.qa_reasons else "no issues found"
+    if not result.is_placeholder:
+        qa_notes += (
+            " — structural QA only (narration present, hash matches, audio "
+            "reference/duration recorded, provider metadata complete); this "
+            "is never a claim of speech quality — a human must still listen "
+            "to the actual audio before this track is considered production-ready."
+        )
     placeholder_banner = (
         "\n**TEST / PLACEHOLDER AUDIO — not real speech, not "
         "production-quality.** See `agents/voice/README.md`.\n"

@@ -9,6 +9,8 @@ import re
 from pathlib import Path
 
 _THUMBNAIL_FILENAME_RE = re.compile(r"^thumbnail-\d+\.md$")
+# Phase 8: the real thumbnail image's own closed extension whitelist.
+_THUMBNAIL_IMAGE_FILENAME_RE = re.compile(r"^thumbnail-\d+\.png$")
 
 
 def write_thumbnail_file(root: Path, filename: str, text: str) -> Path:
@@ -21,6 +23,21 @@ def write_thumbnail_file(root: Path, filename: str, text: str) -> Path:
     thumbnail_dir.mkdir(exist_ok=True)
     path = thumbnail_dir / filename
     path.write_text(text, encoding="utf-8")
+    return path
+
+
+def write_thumbnail_image(root: Path, filename: str, data: bytes) -> Path:
+    """Phase 8: a real rendered thumbnail image — filename-whitelisted
+    exactly like every other writer here."""
+    if not _THUMBNAIL_IMAGE_FILENAME_RE.match(filename):
+        raise PermissionError(
+            f"agents/thumbnail may not write thumbnail image {filename!r} — "
+            "only thumbnail-<n>.png is permitted"
+        )
+    thumbnail_dir = root / "thumbnail"
+    thumbnail_dir.mkdir(exist_ok=True)
+    path = thumbnail_dir / filename
+    path.write_bytes(data)
     return path
 
 

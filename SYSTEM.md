@@ -9,8 +9,19 @@ Operational architecture for the AI Faceless Channel project. Governed by
 Assembly + Captions + Thumbnail + Production QA); Phase 7E complete (Full
 Pipeline Orchestration + Self-Review Loop); Phase 7F complete (Autonomous
 Revision Engine — Research/Fact-Check); Phase 7G complete (Bounded
-Research Retrieval + Evidence Expansion).** Thirteen agents have working,
-tested implementations, stdlib Python, no dependencies: the Research /
+Research Retrieval + Evidence Expansion); Phase 8 complete (Real Episode 1
+Production).** Thirteen agents have working, tested implementations.
+Every phase through 7G was stdlib-Python-only; **Phase 8 is the first to
+add real (non-stdlib) dependencies** — `Pillow` (image rendering) and the
+system tool `ffmpeg` with `libflite` support (speech synthesis + video
+rendering), both listed in `requirements.txt`, both needed for Phase 8's
+own actual task (real media production) rather than added for
+convenience. Four production agents (`agents/voice/`, `agents/assets/`,
+`agents/assembler/`, `agents/thumbnail/`) gained a real, production-
+capable provider alongside their original placeholder/test provider (the
+CLI's and every test's unchanged default) — see "Production layer" below
+and `agents/README.md`'s "Phase 8: real production providers" for exactly
+which. The Research /
 Fact-Check Agent (`agents/researcher/src/`, FACT_CHECK mode, plus a third,
 narrow **Autonomous Revision Mode** — Phase 7F — that can create a
 corrected successor claim when *already-existing, already-recorded*
@@ -488,29 +499,24 @@ triggers); `--apply` is opt-in, a dry run is the default; never touch
   stages that exist (`FACT_CHECK`, `SAFETY_REVIEW`, `ORIGINALITY_REVIEW`)
   — production QA (`agents/production_qa/`) is a separate, later gate in
   the production lifecycle, not part of that orchestrator.
-- No real TTS integration — `agents/voice/`'s only provider
-  (`LocalTestVoiceProvider`) produces a deterministic, clearly-labeled
-  placeholder text artifact, never real speech; no vendor is named
-  anywhere in the schema or code.
-- No actual media generation or retrieval — `agents/producer/`,
-  `agents/voice/`, `agents/visual_planner/`, and `agents/assets/` produce
-  structured *requirements*/*records* only (scenes, a voice-record
-  referencing placeholder audio, visual/asset specifications, an
-  asset-record referencing a placeholder artifact or an unimplemented
-  retrieval requirement); no real audio synthesis, no image/video
-  generation integration, no stock-media crawler.
-- No real video rendering — `agents/assembler/`'s only provider
-  (`LocalTestVideoRenderer`) writes a deterministic placeholder manifest
-  text file, never a playable video file; no FFmpeg or other
-  video-encoding tool is installed or invoked anywhere in this phase. No
-  real thumbnail image generation either — `agents/thumbnail/`'s only
-  provider (`LocalTestThumbnailProvider`) produces a text specification,
-  never a generated image.
-- `RETRIEVED`-strategy assets can never reach a genuine `PASS` in
-  Production QA this phase, since no real asset-retrieval integration
-  exists (`agents/assets/`'s `LocalTestAssetRetrievalProvider` always
-  returns `RETRIEVAL_NOT_IMPLEMENTED`) — documented as an intentional,
-  honest limitation, not a bug, in `agents/production_qa/CONTRACT.md` and
+- **Phase 8 update:** `agents/voice/`, `agents/assets/`, and
+  `agents/assembler/` each gained a real provider (real offline speech via
+  ffmpeg's `flite` filter; a real, offline, non-photorealistic
+  illustration renderer plus real Wikimedia Commons retrieval; a real
+  ffmpeg H.264/AAC renderer) — see `agents/README.md`'s "Phase 8: real
+  production providers" for exactly what each does and doesn't do. Every
+  agent's original placeholder/test provider remains its CLI's and its
+  whole test suite's unchanged default; no cloud/paid vendor is
+  integrated anywhere. `agents/producer/` and `agents/visual_planner/`
+  are unchanged — they still produce structured requirements/records
+  only, which the real providers above now act on.
+- `RETRIEVED`-strategy assets can reach a genuine `PASS` in Production QA
+  as of Phase 8, when `WikimediaCommonsRetrievalProvider` is supplied and
+  a real retrieval succeeds — `agents/assets/src/qa.py`'s own structural
+  check was corrected accordingly (see `agents/assets/README.md`). The
+  *default* `LocalTestAssetRetrievalProvider` still always returns
+  `RETRIEVAL_NOT_IMPLEMENTED`, unchanged, documented in
+  `agents/production_qa/CONTRACT.md` and
   `README.md`.
 - No sophisticated editing intelligence, cinematic pacing optimization,
   computer vision, or thumbnail A/B testing/optimization.

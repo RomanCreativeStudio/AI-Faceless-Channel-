@@ -16,6 +16,10 @@ from pathlib import Path
 
 _VOICE_FILENAME_RE = re.compile(r"^voice-\d+\.md$")
 _AUDIO_FILENAME_RE = re.compile(r"^voice-\d+\.audio\.txt$")
+# Phase 8: the additional, closed set of real-audio container extensions a
+# real VoiceProvider may produce — still a hard whitelist, never "any
+# extension", matching every other writer in this module exactly.
+_AUDIO_BINARY_FILENAME_RE = re.compile(r"^voice-\d+\.wav$")
 
 
 def write_voice_file(root: Path, filename: str, text: str) -> Path:
@@ -41,6 +45,23 @@ def write_audio_artifact(root: Path, filename: str, content: str) -> Path:
     voice_dir.mkdir(exist_ok=True)
     path = voice_dir / filename
     path.write_text(content, encoding="utf-8")
+    return path
+
+
+def write_audio_artifact_binary(root: Path, filename: str, data: bytes) -> Path:
+    """Phase 8: the one new write path for a real VoiceProvider's genuine
+    binary audio — filename-whitelisted exactly like every other writer in
+    this module, just a different, still-closed extension set.
+    """
+    if not _AUDIO_BINARY_FILENAME_RE.match(filename):
+        raise PermissionError(
+            f"agents/voice may not write binary audio artifact {filename!r} — "
+            "only voice-<n>.wav is permitted"
+        )
+    voice_dir = root / "voice"
+    voice_dir.mkdir(exist_ok=True)
+    path = voice_dir / filename
+    path.write_bytes(data)
     return path
 
 

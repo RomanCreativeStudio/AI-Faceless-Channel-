@@ -17,18 +17,49 @@ reviewer states, asset provenance, or voice records.
 
 ## Actual video artifact status
 
-**No real video is produced this phase.** This environment has no
-`ffmpeg` (or any video-encoding tool) installed, and every agent in this
-repo is stdlib-only by established convention — adding a dependency to
-render real video would be a unilateral architecture change, not this
-phase's task. `LocalTestVideoRenderer` (the only `VideoRenderer`
-implementation this phase) writes a deterministic, permanently-labeled
-placeholder manifest (`output/video-01.manifest.txt`) describing the
-scene-by-scene sequence a real renderer would assemble.
-`templates/TIMELINE.md`'s `Playable` field is always `NO` — this agent
-never claims an artifact is playable without independent verification.
-A future real renderer is a second `VideoRenderer` implementation;
-nothing in `pipeline.py` needs to change to add one.
+**A real renderer now exists (Phase 8): `agents/assembler/src/real_provider.py`'s
+`FFmpegVideoRenderer`.** `LocalTestVideoRenderer` remains the CLI's and
+every test's default, unchanged — it still writes the deterministic,
+permanently-labeled placeholder manifest (`output/video-01.manifest.txt`),
+and `templates/TIMELINE.md`'s `Playable` field is `NO` for it, same as
+before. `FFmpegVideoRenderer` is a second `VideoRenderer` implementation
+(`provider.py`'s `render()` gained one additive parameter, `root: Path`,
+for it to resolve scenes' narration/visual/caption references into real
+files — the placeholder renderer ignores it). It:
+
+1. Normalizes each scene's real visual asset into a silent video segment
+   held for exactly that scene's `templates/TIMELINE.md` duration.
+2. Concatenates every segment (stream-copy — safe because normalization
+   already gave every segment identical codec parameters).
+3. Muxes in the real narration audio and burns in captions built from
+   `agents/captions/`'s own per-scene, scene-relative timings plus each
+   scene's `start` offset (`captions_reader.py`) — never a
+   `templates/CAPTIONS.md` schema change.
+
+If narration is longer than the timeline's total duration, only the
+**last** scene's held duration is extended to cover the difference
+(documented, not silently absorbed) — every other scene's duration is
+exactly what `templates/TIMELINE.md` records; `-shortest` then trims any
+leftover silent video past the audio's own end. `Playable = YES` is only
+ever returned once this renderer's own `ffprobe` call has independently
+confirmed the output has both a video and an audio stream and a positive
+duration.
+
+**A real architectural friction, found and documented, not silently
+worked around:** `agents/full_pipeline/`'s stage order runs `ASSEMBLER`
+*before* `CAPTIONS` (and `agents/captions/`'s own preconditions require
+`Production status == CAPTIONS`, which only `ASSEMBLER`'s own successful
+completion sets — captions structurally cannot run first). So the first,
+in-sequence assembler pass has no `captions/captions-01.md` to burn in
+yet — `FFmpegVideoRenderer` handles this gracefully (silent captions, no
+crash) rather than blocking the whole stage on a file that hasn't been
+produced yet. A genuinely captioned cut currently requires a second,
+explicit render pass after `agents/captions/` runs (not yet automated by
+any agent — see STATE.md's Phase 8 "Known limitations"); reordering
+`CAPTIONS` before `ASSEMBLER` would fix this properly but is a bigger
+change than "swap in a real provider," so it's deliberately left as a
+documented follow-up rather than done under this phase's own instruction
+not to redesign the pipeline.
 
 ## How it works
 

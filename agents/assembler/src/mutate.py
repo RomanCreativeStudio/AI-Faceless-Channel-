@@ -10,6 +10,9 @@ from pathlib import Path
 
 _TIMELINE_FILENAME_RE = re.compile(r"^timeline-\d+\.md$")
 _OUTPUT_FILENAME_RE = re.compile(r"^video-\d+\.manifest\.txt$")
+# Phase 8: the real renderer's own closed extension whitelist — still not
+# "any file", just a second permitted format.
+_OUTPUT_BINARY_FILENAME_RE = re.compile(r"^video-\d+\.mp4$")
 
 
 def write_timeline_file(root: Path, filename: str, text: str) -> Path:
@@ -35,6 +38,21 @@ def write_output_artifact(root: Path, filename: str, content: str) -> Path:
     output_dir.mkdir(exist_ok=True)
     path = output_dir / filename
     path.write_text(content, encoding="utf-8")
+    return path
+
+
+def write_output_artifact_binary(root: Path, filename: str, data: bytes) -> Path:
+    """Phase 8: the real renderer's genuine binary video file —
+    filename-whitelisted exactly like every other writer here."""
+    if not _OUTPUT_BINARY_FILENAME_RE.match(filename):
+        raise PermissionError(
+            f"agents/assembler may not write binary output file {filename!r} — "
+            "only video-<n>.mp4 is permitted"
+        )
+    output_dir = root / "output"
+    output_dir.mkdir(exist_ok=True)
+    path = output_dir / filename
+    path.write_bytes(data)
     return path
 
 

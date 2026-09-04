@@ -26,6 +26,9 @@ class ThumbnailResult:
     thumbnail_content_hash: str
     thumbnail_status: str
     reasons: list[str]
+    # Phase 8 addition — optional/defaulted, spec-only runs are unaffected.
+    image_reference: str = "NOT_RENDERED"
+    image_bytes: bytes | None = None
     aborted: bool = False
     abort_reason: str = ""
     blocked: bool = False

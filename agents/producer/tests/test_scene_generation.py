@@ -49,6 +49,40 @@ class SceneGenerationTests(unittest.TestCase):
         self.assertIn("Exact hook text that must survive unchanged.", narrations)
         self.assertIn("Exact beat text that must survive unchanged.", narrations)
 
+    # --- Phase 8 regression: a hard-wrapped Hook must not corrupt the
+    # written scene file's own narration table cell ---
+    def test_multiline_hook_is_collapsed_to_a_single_line_never_corrupting_the_scene_table(self):
+        # A SCRIPT.md author hard-wrapping a long Hook across source lines
+        # (this repo's own established prose style — see e.g.
+        # content/what-if/*/SCRIPT.md) previously survived into the
+        # written scene-01.md's own `| Narration text | ... |` table cell
+        # with the embedded newlines intact, corrupting that table (a
+        # markdown table cell cannot span lines) and silently truncating
+        # everything downstream (agents/assets/'s scene reader parsed an
+        # empty Narration text). Only formatting is normalized here — no
+        # word may be dropped or changed.
+        build_minimal_item(
+            self.root,
+            hook='"This sentence is deliberately wrapped\nacross more than one\nsource line."',
+            beats=["1. An ordinary beat. — claims: `c1`"],
+        )
+        result = run_producer(self.root, apply=True)
+        hook_scene = next(s for s in result.scenes if s.order == 1)
+        self.assertNotIn("\n", hook_scene.narration_text)
+        self.assertEqual(
+            hook_scene.narration_text,
+            '"This sentence is deliberately wrapped across more than one source line."',
+        )
+
+        # And the written scene-01.md file itself must still parse back
+        # to that same single-line value — the actual, real-world symptom
+        # this bug produced (an empty Narration text once re-read).
+        from ...assets.src.scene_reader import load_scene_visual_records
+        reloaded = load_scene_visual_records(self.root / "scenes")
+        reloaded_hook_scene = next(s for s in reloaded if s.order == 1)
+        self.assertEqual(reloaded_hook_scene.narration_text, hook_scene.narration_text)
+        self.assertNotEqual(reloaded_hook_scene.narration_text.strip(), "")
+
     # --- Test 8: claim references preserved ---
     def test_claim_references_carried_into_scenes(self):
         build_minimal_item(

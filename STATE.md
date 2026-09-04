@@ -12,7 +12,8 @@ Last updated: 2026-09-04
 **Phase 7D — Video Assembly + Captions + Thumbnail + Production QA — COMPLETE** (unchanged).
 **Phase 7E — Full Pipeline Orchestration + Self-Review Loop — COMPLETE** (unchanged).
 **Phase 7F — Autonomous Revision Engine (Research/Fact-Check) — COMPLETE** (unchanged this phase).
-**Phase 7G — Bounded Research Retrieval + Evidence Expansion — COMPLETE.**
+**Phase 7G — Bounded Research Retrieval + Evidence Expansion — COMPLETE** (unchanged this phase).
+**Phase 8 — Real Episode 1 Production — COMPLETE.**
 
 ## Completed (Phase 7E)
 
@@ -880,21 +881,253 @@ correctly still escalating with the default no-data provider).
    consulted the whole `ContentBundle`); removed once nothing in the
    function actually used it, keeping the signature honest.
 
+## Completed (Phase 8)
+
+**Real Episode 1 Production.** Moved from "production pipeline
+architecture" to "first real episode": four production agents gained a
+real, non-placeholder provider, and Episode 1 ("What If Modern Medicine
+Existed During the Black Death?") was produced end to end with real
+audio, real visuals, a real captioned MP4, and a real thumbnail, then
+manually inspected. The Learning Engine, autonomous publishing, and
+unrestricted browsing were explicitly not built, per this phase's own
+scope limit.
+
+### Real provider status
+
+| Agent | Real provider | What it actually does | Network / credentials |
+|---|---|---|---|
+| `agents/voice/` | `FliteVoiceProvider` (`real_provider.py`) | Real speech via ffmpeg's built-in `flite` filter | None — fully offline |
+| `agents/assets/` (GENERATED) | `GeneratedAssetProviderReal` | Real, deterministic, non-photorealistic illustration (Pillow) | None — fully offline |
+| `agents/assets/` (RETRIEVED) | `WikimediaCommonsRetrievalProvider` | Real image search + download, real license/provenance recorded | Public Wikimedia API, no API key |
+| `agents/assembler/` | `FFmpegVideoRenderer` (`real_provider.py`) | Real H.264/AAC MP4, real captions burned in, `ffprobe`-verified playable | None — fully offline |
+| `agents/thumbnail/` | `render_thumbnail_image` (`real_provider.py`, opt-in) | Real PNG rendered from the existing spec (reuses the assets illustration renderer) | None — fully offline |
+
+No cloud/paid TTS or image-generation vendor is integrated anywhere — the
+environment had no such credentials configured (checked directly, e.g.
+`env | grep -i api_key`/`token` — none found beyond this platform's own
+session tokens and unrelated AWS credentials, which were deliberately
+**not** repurposed for a new paid service without explicit authorization
+for that specific purpose). Every real provider's own CLI/test default
+remains the original placeholder/test provider, unchanged.
+
+### Renderer status
+
+`agents/assembler/src/real_provider.py`'s `FFmpegVideoRenderer`: resolves
+real narration audio and real per-scene visual assets from disk, holds
+each scene's image for exactly its `templates/TIMELINE.md` duration,
+concatenates (stream-copy), muxes in the real audio, burns in captions
+built from `agents/captions/`'s own per-scene timings plus each scene's
+timeline `start` offset (`captions_reader.py` — no `templates/CAPTIONS.md`
+schema change), and independently verifies the output via `ffprobe`
+before ever reporting `Playable = YES`. `VideoRenderer.render()` gained
+one additive parameter (`root: Path`) for this — the placeholder renderer
+ignores it.
+
+### Episode 1 content path
+
+`content/what-if/wi-20260904-black-death-modern-medicine-ep1/` — a real,
+independent content item, never the schema/engineering golden sample at
+`content/what-if/wi-20260902-black-death-modern-medicine/` (confirmed
+untouched: `git status --porcelain -- content/what-if/wi-20260902-...`
+returns nothing). Research (`research/`) and claims (`claims/`) are
+carried over in substance from that already-reviewed fixture (only
+`Claim ID`/`Content ID` fields updated); `SCRIPT.md` is a full rewrite —
+the fixture's beat-level *descriptions* replaced with genuine full-
+sentence spoken narration for the Hook and all six beats (7 scenes once
+`agents/producer/` runs: Hook + one scene per beat), since
+`agents/producer/`'s real scene-builder lifts each beat's text verbatim
+into a scene's spoken narration.
+
+### Actual output artifacts (from an isolated technical-validation copy)
+
+Produced and manually inspected (frames extracted and viewed, audio
+duration cross-checked, thumbnail viewed): a ~188s WAV narration track
+(`voice/voice-01.wav`, QA `PASS`), 5 real generated illustrations + 2
+scene visuals (see "Known limitations" — Wikimedia retrieval was rate-
+limited during this session for those 2), a ~188s H.264/AAC MP4 with
+burned-in captions (`ffprobe`-verified `Playable = YES`, audio/video
+duration matched to within fractions of a second), and a real 1280×720
+thumbnail PNG. All three were sent to the user directly for review. The
+canonical episode directory itself was never mutated by this validation
+run — see "Human approval / production gate," below.
+
+### Human approval / production gate
+
+**Never bypassed.** The canonical Episode 1 `CONTENT_ITEM.md` status
+remains whatever the automated pipeline naturally left it at — this
+system never set it to `APPROVED`. Real production (Producer onward)
+structurally requires `APPROVED`, so validating the real providers
+required a separate, isolated, throwaway copy (under this session's own
+scratch directory, never committed, never part of the repository) with
+`APPROVED` set only in that copy — the exact same test-only pattern this
+codebase's own `agents/full_pipeline/tests/builders.py:simulate_human_approval`
+already establishes and documents ("the one action no agent in this
+system may ever perform... never called by any agent's own code").
+
+Content review (`agents/orchestrator/`, real, against the canonical
+episode, `apply=False`) currently returns `REVISION_REQUIRED`:
+`claims/c11.md` ("antibiotics were not developed until the 20th century")
+has `Supporting sources = N/A` — a real, pre-existing evidence gap
+(already flagged as needing "a future research pass" back in Phase 4 of
+the original fixture) that this phase could not close without
+fabricating a citation. Five real, distinct external sources were checked
+this phase (WHO's live plague fact sheet, Wikipedia's API, Britannica,
+NLM, a PMC article) — none confirmed the specific claim; Wikipedia's API
+was also repeatedly rate-limited. No `ResearchProvider` capable of live
+citation-finding exists yet (Phase 7G explicitly deferred that as future
+work) building one is out of Phase 8's own scope (real media production,
+not research retrieval). **Exact human action needed:** either supply a
+real source for `claims/c11.md` (a research pass), or make an editorial
+call to soften/remove that specific claim, before `FACT_CHECK` can
+genuinely `PASS` and a human can consider setting `status = APPROVED`. A
+separate, smaller fix (`claims/c1.md`'s `Contradictory evidence` field
+was miscategorized — a methodology-range note, not a genuine dispute) was
+identified and corrected this phase.
+
+### Tests / full-suite result
+
+55 new tests across `agents/voice/tests/test_real_provider.py` (10),
+`agents/assets/tests/test_real_providers.py` (23),
+`agents/assembler/tests/test_real_provider.py` (8),
+`agents/thumbnail/tests/test_real_provider.py` (5) +
+`test_pipeline.py` (2 new), plus one regression test in
+`agents/producer/tests/test_scene_generation.py` for the whitespace/
+table-corruption bug below. All Wikimedia calls in the automated suite
+are mocked (deterministic local fixtures, no live network call) per this
+phase's own instruction; every ffmpeg-dependent test runs the real
+binary (skipped automatically if ffmpeg isn't installed). **Full repo
+suite: 496/496 passing, zero regressions** (447 baseline + 49 new).
+
+### Production QA result
+
+Run for real (`apply=True`) against the isolated validation copy:
+`REVISION_REQUIRED` — correctly. Two assets (the two Case A/FACT-only
+scenes needing `RETRIEVED` media) never achieved genuine retrieval
+evidence in that run (Wikimedia rate-limited; a manual, clearly-labeled
+GENERATED substitution was used only so the manual video inspection had
+a complete, watchable render — recorded honestly, `generation_status`
+left as `NOT_STARTED`, never marked `RETRIEVED`). `agents/production_qa/`
+correctly flagged both — proof the QA layer does not rubber-stamp a
+substitution it wasn't told is real. Every other check passed.
+
+### Human-review state
+
+The highest automated state remains `HUMAN_REVIEW` (unreachable this
+phase for the canonical episode, since `FACT_CHECK` hasn't passed and
+`status` was never set to `APPROVED`) — nothing in this system moved, or
+can move, anything to `PUBLISHED`. `CONSTITUTION.md` rule 2 (no automated
+publishing authority) is untouched.
+
+### Known limitations
+
+- **`claims/c11.md`'s evidence gap is still open** — see "Human approval
+  / production gate" above; this is the one thing genuinely blocking a
+  full automated `FACT_CHECK` `PASS` for Episode 1 right now.
+- **No real `ResearchProvider`** (live citation-finding) — Phase 7G's
+  abstraction exists; nothing implements it yet. Out of Phase 8's own
+  scope (real media production).
+- **Wikimedia Commons retrieval is realistically rate-limited** in this
+  shared sandboxed environment — the provider itself retries 429/5xx with
+  backoff and fails closed (never fabricates), but a real production run
+  here should expect some `RETRIEVED`-strategy scenes to need a retry on
+  a later, less-contended run.
+- **Assembler/Captions stage-order friction** — `agents/full_pipeline/`
+  runs `ASSEMBLER` before `CAPTIONS` (captions structurally cannot run
+  first — its own precondition is `Production status == CAPTIONS`, which
+  only a successful assembler run sets), so the first, in-sequence
+  assembler pass has no captions to burn in yet. `FFmpegVideoRenderer`
+  degrades gracefully (silent video, no crash) rather than blocking. A
+  genuinely captioned cut currently needs a second, explicit render pass
+  after `agents/captions/` runs — not yet automated by any agent (this
+  phase produced one manually, for inspection). Reordering the two stages
+  would fix this properly but is a bigger change than "swap in a real
+  provider" and was left as a documented follow-up rather than done under
+  this phase's explicit "do not redesign the pipeline" instruction.
+- **No transitions beyond hard cuts** — `templates/TIMELINE.md`'s
+  `Transition in/out` fields are read and recorded, but only "cut" is
+  actually implemented by the renderer; anything else silently falls back
+  to a hard cut. Deliberately minimal, per this phase's own "clean,
+  watchable baseline, not complicated cinematic effects" instruction.
+  Episode 1 itself only ever uses "cut," so this never mattered in
+  practice this phase.
+- **Illustration renderer is deliberately abstract** — gradient +
+  concentric-ring motif + caption, never an attempt at a photorealistic
+  or period-accurate scene. This is an honest, explicit design choice
+  (see `agents/assets/src/illustration.py`'s own docstring), not a bug —
+  it keeps every `GENERATED_RECONSTRUCTION` asset unmistakably non-
+  photographic without needing a real image-generation model this phase
+  has no credentials for anyway.
+- **Thumbnail image rendering is opt-in** (`render_image=True`), not the
+  pipeline default — `agents/full_pipeline/` was not modified to always
+  request one; a caller (or a future small change) must ask for it.
+- **`Pillow` and `ffmpeg` are now real dependencies** (`requirements.txt`)
+  — every phase before 8 was stdlib-only; this is a deliberate,
+  documented departure, not an oversight.
+
+### Genuine findings
+
+1. **A real, latent bug in `agents/producer/src/scene_builder.py`**,
+   found and fixed with a regression test: a SCRIPT.md author hard-
+   wrapping a long Hook across multiple source lines (this repo's own
+   established prose style) survived, with embedded newlines intact,
+   into the written `scenes/scene-01.md`'s own `| Narration text | ... |`
+   table cell — corrupting that markdown table and silently truncating
+   `narration_text` to empty once re-read. Numbered beats were already
+   protected (`_extract_beats` joins wrapped lines before use); the Hook
+   path was not. This had never been exercised before, because no prior
+   phase had actually run `agents/producer/` against a real, hand-authored
+   SCRIPT.md with a wrapped Hook — Phase 8 was the first real run. Fixed
+   by collapsing whitespace at the source (the same "formatting only,
+   never content" transformation `agents/voice/src/narration.py` already
+   applies one stage later, for the identical reason).
+2. **A real visual defect, found and fixed**: `illustration.py`'s own
+   burned-in caption text and the video renderer's separately burned-in,
+   timed SRT captions occupy the same lower-third screen area — playing
+   together, they produced illegible, overlapping text. Fixed by adding
+   `draw_caption` (default `True`, for `agents/thumbnail/`'s use, which
+   has no separate caption track) and having
+   `GeneratedAssetProviderReal` pass `draw_caption=False` for scene
+   assets specifically, since a scene's real narration is already
+   captioned, in sync, by the renderer.
+3. **A stale assumption in `agents/assets/src/qa.py`**, found and fixed:
+   its structural check unconditionally flagged any `RETRIEVED` asset
+   with a source URL as suspicious — correct before Phase 8 (no real
+   retrieval existed, so a URL there could only mean an error), actively
+   wrong now that a real retrieval provider exists and URLs are expected.
+   Corrected to require a URL *and* a retrieved artifact file
+   specifically when `generation_status == RETRIEVED`; a regression test
+   (`test_catches_retrieved_asset_with_fabricated_url`, updated) still
+   catches a URL recorded *without* genuine `RETRIEVED` status.
+4. **`agents/visual_planner/`'s `visual_description` is fixed boilerplate
+   per authenticity bucket, never scene-specific** — harmless pre-Phase-8
+   (a placeholder provider never acted on it meaningfully), a real defect
+   now. Fixed in `agents/assets/src/pipeline.py` by preferring the
+   scene's own narration text as the prompt handed to a real provider —
+   narrower and more defensible than editing `agents/visual_planner/`'s
+   own domain logic, and consistent with this codebase's established
+   "reuse generic data, never cross-import another agent's judgment"
+   boundary.
+5. **The AWS credentials present in this environment were deliberately
+   not used** for any Phase 8 provider (e.g. AWS Polly for real cloud
+   TTS) — they were not confirmed to be provisioned for that specific
+   purpose, and using found infrastructure credentials for a new, paid,
+   external-facing service without explicit authorization is a real risk
+   this phase declined to take. `flite`'s complete lack of any
+   credential requirement was the deciding factor in choosing it.
+
 ## Next task
 
-No further phase was specified as the "exact next task" by this phase's
-own instructions beyond delivering this report and, if logically defined,
-naming the next one. Two natural, not-yet-scoped continuations exist:
-(1) extending Autonomous Revision Mode's evidence-linkage-repair pattern
-to `agents/safety/`/`agents/originality/` where a genuinely safe,
-narrow, deterministic fix exists for either (none has been identified
-yet — this would need its own careful evidence-rules analysis, not a
-blind copy of this phase's pattern); (2) a real `ResearchProvider`
-implementation (live web-search/archive retrieval) satisfying the
-`Protocol` Phase 7G just defined — the abstraction now exists and is
-provider-independent, but no real provider has been built, and doing so
-is a distinct, deliberate follow-up with its own authentication/
-rate-limiting/legal-terms-of-use considerations well outside this
-project's current stdlib-only, no-external-API scope. Neither is started.
-Publishing remains permanently human-gated per `CONSTITUTION.md` rule 2,
-regardless of anything built so far.
+No further phase was specified as the "exact next task" beyond this
+report. Three natural, not-yet-scoped continuations exist, in
+likely-priority order: (1) close `claims/c11.md`'s evidence gap (a real
+research pass, or an editorial call to soften/remove the claim) so
+Episode 1's `FACT_CHECK` can genuinely `PASS` and a human owner can
+consider `status = APPROVED` — this is the one concrete blocker on the
+actual episode right now; (2) a real `ResearchProvider` implementation
+(Phase 7G's own deferred follow-up), which would also give (1) an
+automated path; (3) per this phase's own explicit instruction, observe
+what a real, human-reviewed Episode 1 actually needs before building
+the Learning Engine, analytics, or any further automation — none of
+that is started, and none should be until there is real production
+experience to learn from. Publishing remains permanently human-gated per
+`CONSTITUTION.md` rule 2, regardless of anything built so far.
