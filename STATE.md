@@ -1790,8 +1790,21 @@ concatenates the resulting PCM audio — bounding peak memory regardless
 of script length, with zero effect on the narration text the engine
 receives or on what the pipeline records about it (5 new tests verify
 exact-reconstruction, no mid-sentence splits, and that realistic-length
-scripts actually produce multiple chunks). A second, chunked attempt was
-launched immediately — *(its actual result: elapsed time, output size,
+scripts actually produce multiple chunks).
+
+**A second attempt, chunked, was also genuinely OOM-killed** — at
+essentially the same ~13.9GB ceiling, though after completing noticeably
+more work first (5 of ~6-7 chunks fully synthesized+converted, versus
+zero completed conversions in the first attempt). Reported honestly,
+same as the first. Memory scaling with total text/forward-passes
+processed rather than any one call's audio size pointed to PyTorch
+autograd graphs accumulating across inference calls that neither
+MeloTTS's nor OpenVoice's own code wraps in `no_grad`/`inference_mode`
+internally. **Fixed** by wrapping the per-chunk synthesis/conversion
+loop in `torch.inference_mode()` — a second, independent fix layered on
+top of chunking, again with no effect on narration content or recorded
+pipeline fields. A third attempt, with both fixes applied, was launched
+immediately — *(its actual result: elapsed time, output size,
 ffprobe-verified audio properties, and Voice QA outcome: pending
 completion of that still-in-progress run; a follow-up commit records the
 real numbers rather than leaving this section unfinished)*. The isolated

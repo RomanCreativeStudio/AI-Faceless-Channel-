@@ -165,13 +165,34 @@ PROVIDER-READY NARRATION string, the script-hash relationship), is
 completely unaffected; chunking is invisible above the engine's own
 `synthesize()` call.
 
-*(Second attempt, with the fix applied, was launched immediately after
+**Second attempt: also genuinely OOM-killed, at the same ~13.9GB
+ceiling — chunking alone was not sufficient.** With chunking applied,
+this attempt processed noticeably further (5 of ~6-7 chunks fully
+synthesized and tone-converted, versus zero chunks' conversion completed
+in the first attempt) before hitting the same memory ceiling and being
+killed (confirmed again via `dmesg`). Memory being tied to *total text/
+forward-passes processed* rather than to any single call's audio size is
+the signature of PyTorch retaining autograd computation graphs across
+inference calls that neither MeloTTS's nor OpenVoice's own library code
+wraps in `torch.no_grad()`/`torch.inference_mode()` internally.
+
+**Root-caused further and fixed**: the per-chunk synthesis/conversion
+loop is now wrapped in `torch.inference_mode()`, explicitly disabling
+gradient tracking for every inference call — the standard fix for this
+exact PyTorch memory-accumulation pattern. This is a second, independent
+fix layered on top of chunking (chunking bounds per-chunk audio/spectral
+memory; `inference_mode()` prevents graph-retention memory from
+accumulating *across* chunks) — again purely an internal execution
+detail with no effect on the narration text or the pipeline's own
+recorded fields.
+
+*(Third attempt, with both fixes applied, was launched immediately after
 and is filled in below from its actual result — this section was
-committed once with the numbers below still pending, per this project's
+committed with the numbers below still pending, per this project's
 established practice of never blocking a commit on a background job's
 completion; nothing here was fabricated ahead of the real result.)*
 
-**Second attempt (chunked) result:**
+**Third attempt (chunked + inference_mode) result:**
 
 *(elapsed time, chunk count, output size, duration, ffprobe-verified
 audio properties, and Voice QA result pending completion of this

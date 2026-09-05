@@ -223,51 +223,60 @@ class OpenVoiceV2Engine:
                 )
 
             # Synthesized and converted one bounded-size chunk at a time
-            # (see _chunk_narration's docstring) — each chunk's
-            # intermediate files and in-memory tensors are released
-            # before the next chunk starts, keeping peak memory roughly
-            # constant regardless of total narration length, rather than
-            # holding the entire episode's audio/spectral state in memory
-            # simultaneously (the real, reproduced failure mode this was
-            # built to fix).
+            # (see _chunk_narration's docstring), each inside
+            # torch.inference_mode(). A first, non-chunked version of
+            # this code was reproducibly OOM-killed on a full episode
+            # script (see STATE.md/OPENVOICE_V2_TEST_REPORT.md for the
+            # dmesg evidence); chunking alone was NOT sufficient — a
+            # second attempt, chunked but without inference_mode(), was
+            # ALSO OOM-killed at essentially the same total memory,
+            # after processing more chunks than fit in one pass. That
+            # pattern (memory tied to total text/forward-passes
+            # processed, not to any one call's audio size) is the
+            # signature of PyTorch retaining autograd graphs across
+            # inference calls neither MeloTTS's nor OpenVoice's own code
+            # wraps in no_grad/inference_mode internally. Explicitly
+            # disabling gradient tracking here removes that
+            # accumulation regardless of chunk count.
             wav_params = None
             combined_frames = bytearray()
-            for index, chunk_text in enumerate(chunks):
-                base_audio_path = tmp_path / f"base_{index}.wav"
-                chunk_output_path = tmp_path / f"output_{index}.wav"
+            with torch.inference_mode():
+                for index, chunk_text in enumerate(chunks):
+                    base_audio_path = tmp_path / f"base_{index}.wav"
+                    chunk_output_path = tmp_path / f"output_{index}.wav"
 
-                model.tts_to_file(chunk_text, speaker_ids[melo_speaker_key], str(base_audio_path), speed=1.0)
-                converter.convert(
-                    audio_src_path=str(base_audio_path),
-                    src_se=source_se,
-                    tgt_se=target_se,
-                    output_path=str(chunk_output_path),
-                    message="@MyShell",
-                )
-                if not chunk_output_path.is_file():
-                    raise RuntimeError(
-                        f"OpenVoice V2 conversion reported success but produced no output "
-                        f"file for narration chunk {index + 1}/{len(chunks)}"
+                    model.tts_to_file(chunk_text, speaker_ids[melo_speaker_key], str(base_audio_path), speed=1.0)
+                    converter.convert(
+                        audio_src_path=str(base_audio_path),
+                        src_se=source_se,
+                        tgt_se=target_se,
+                        output_path=str(chunk_output_path),
+                        message="@MyShell",
                     )
-                with wave.open(str(chunk_output_path), "rb") as wav_file:
-                    params = wav_file.getparams()
-                    frames = wav_file.readframes(wav_file.getnframes())
-                if wav_params is None:
-                    wav_params = params
-                elif (params.nchannels, params.sampwidth, params.framerate) != (
-                    wav_params.nchannels, wav_params.sampwidth, wav_params.framerate,
-                ):
-                    raise RuntimeError(
-                        f"OpenVoice V2 chunk {index + 1}/{len(chunks)} produced audio with "
-                        "different format than earlier chunks — refusing to concatenate "
-                        "mismatched audio"
-                    )
-                combined_frames += frames
+                    if not chunk_output_path.is_file():
+                        raise RuntimeError(
+                            f"OpenVoice V2 conversion reported success but produced no output "
+                            f"file for narration chunk {index + 1}/{len(chunks)}"
+                        )
+                    with wave.open(str(chunk_output_path), "rb") as wav_file:
+                        params = wav_file.getparams()
+                        frames = wav_file.readframes(wav_file.getnframes())
+                    if wav_params is None:
+                        wav_params = params
+                    elif (params.nchannels, params.sampwidth, params.framerate) != (
+                        wav_params.nchannels, wav_params.sampwidth, wav_params.framerate,
+                    ):
+                        raise RuntimeError(
+                            f"OpenVoice V2 chunk {index + 1}/{len(chunks)} produced audio with "
+                            "different format than earlier chunks — refusing to concatenate "
+                            "mismatched audio"
+                        )
+                    combined_frames += frames
 
-                base_audio_path.unlink(missing_ok=True)
-                chunk_output_path.unlink(missing_ok=True)
-                del frames
-                gc.collect()
+                    base_audio_path.unlink(missing_ok=True)
+                    chunk_output_path.unlink(missing_ok=True)
+                    del frames
+                    gc.collect()
 
             if wav_params is None or not combined_frames:
                 raise RuntimeError("OpenVoice V2 produced no audio output across any narration chunk")
