@@ -1557,6 +1557,52 @@ whatever that engine's own `required_credential_env_vars` name); (4)
 only then, a real, explicit owner-voice generation as its own validation
 step — never claimed operational before that actually succeeds.
 
+## Completed (Phase 8 follow-up 5: owner-voice provider readiness evaluation)
+
+**Research-only** — no code changed, no account created, no purchase
+made, no credential added, and the owner's private voice sample was not
+uploaded to, or referenced by path/content to, any external service.
+Full write-up: `agents/voice/PROVIDER_EVALUATION.md`.
+
+Evaluated five real options against the existing, unmodified
+`OwnerVoiceEngine` protocol: **ElevenLabs**, **PlayHT**, **Resemble AI**
+(commercial cloud APIs), **Azure AI Speech "Personal Voice"** (gated,
+consent-first enterprise feature), and **OpenVoice V2** (MyShell, MIT
+license, self-hosted). Coqui XTTS-v2 was checked and explicitly *not*
+shortlisted as a primary recommendation: its model weights are licensed
+under CPML 1.0.0, non-commercial use only — a real, easy-to-miss legal
+trap for a channel that publishes commercially.
+
+`INITIAL_SAMPLE_STATUS = TECHNICALLY_USABLE_FOR_TEST` — the existing
+~18s sample is technically clean but below the recommended minimum for
+several reputable options (ElevenLabs recommends 1–2 minutes; Azure
+requires 1 minute); Resemble AI (~10s floor) and OpenVoice V2 (1–5s
+floor) comfortably support it. A longer 2–5 minute sample is
+recommended before any production commitment, independent of which
+provider is eventually chosen — not concluded to be production-quality
+merely because it is technically clean.
+
+Non-binding recommendations (final choice remains
+`HUMAN_OWNER_DECISION`): best overall — ElevenLabs; best low-cost —
+Resemble AI (hosted) or OpenVoice V2 (self-hosted, free); best
+privacy/local — OpenVoice V2 (MIT-licensed, sample never leaves
+owner-controlled infrastructure); best expressive-narration candidate —
+ElevenLabs, reputationally (not independently verified — no provider's
+raw voice-clone quality was tested in this evaluation; every "quality"
+cell in the comparison matrix is marked `UNKNOWN` for that reason).
+
+**No real adapter can be implemented yet** — that requires the owner to
+first pick a provider, weighing the cloud-upload-vs-self-hosted privacy
+tradeoff and cost, then supply real, owner-obtained credentials via the
+environment. Once that happens, exactly one new, isolated module
+implementing the existing `OwnerVoiceEngine` protocol is the only code
+change needed — `owner_voice.py`, `pipeline.py`, `mutate.py`, and
+`templates/VOICE.md` all stay unchanged.
+
+**Full suite: 567/567 passing, unchanged** (no source code was
+modified this round). Golden sample and Episode 1 (still
+`WAITING_FOR_HUMAN_SAFETY_REVIEW`) both confirmed untouched.
+
 ## Next task
 
 No further phase was specified as the "exact next task" beyond this
@@ -1570,9 +1616,12 @@ further without a human action first:
    session should run `continue_after_human_safety_review()` (Originality
    on `CLEARED`, nothing further on `NOT_CLEARED`) and go no further.
 2. **Owner voice**: needs a human decision on which real voice-cloning
-   engine to use (see "Remaining setup requirement" above), then that
-   engine's adapter implemented and registered, then the owner's actual
-   sample/config supplied via the environment. Only after both a real
+   provider to use (see `agents/voice/PROVIDER_EVALUATION.md`'s
+   recommendations and tradeoffs), then that provider's adapter
+   implemented and registered (a single small module — see the
+   evaluation's Section 1/"Can a real adapter be implemented now?"),
+   then the owner's actual sample/config and real, owner-obtained
+   credentials supplied via the environment. Only after both a real
    engine is configured *and* Episode 1's content review reaches human
    approval should Episode 1 actually be produced in the owner's voice —
    this task's own explicit instruction is not to regenerate Episode 1's
