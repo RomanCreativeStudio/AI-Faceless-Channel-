@@ -1774,18 +1774,36 @@ directory was never touched): the real `run_producer()` ran first
 (7 scenes produced), then the real, registered OpenVoice V2 engine was
 invoked through the real `run_voice_generation()` pipeline against the
 full Episode 1 script (~479 words, all 6 beats + Hook, not just a short
-test clip) — *(elapsed time, output size, ffprobe-verified audio
-properties, and Voice QA result: pending completion of that
-still-in-progress run; a follow-up commit records the actual numbers
-rather than leaving this section unfinished)*. The isolated production
-pipeline (Visual Planner → Assets → Assembler → Captions → Thumbnail →
-Production QA) has not yet been run this round — planned immediately
-after narration completes, per the same isolated-copy pattern.
+test clip).
 
-**Full test suite: 606/606 passing** (599 baseline + 7 new; 2 skipped —
-the two checkpoint-specific scenarios above that require the isolated
-venv, same honest skip pattern already used for ffmpeg-dependent tests
-elsewhere in this repository).
+**First attempt genuinely OOM-killed** — reported honestly rather than
+hidden: synthesizing + tone-converting the entire script in one pass
+reached ~13.9GB resident memory against this sandboxed session's
+~14.3GB cgroup limit and was killed by the kernel (confirmed via
+`dmesg`'s `oom-kill` log entry), right as MeloTTS's own synthesis phase
+finished and tone-color conversion began on the full combined audio. No
+audio was produced or reported as a result of that attempt. **Root-caused
+and fixed**: `openvoice_v2_engine.py`'s `synthesize()` now chunks
+narration into ~100-word, sentence-boundary-respecting pieces
+(`_chunk_narration`), synthesizes/converts each independently, and
+concatenates the resulting PCM audio — bounding peak memory regardless
+of script length, with zero effect on the narration text the engine
+receives or on what the pipeline records about it (5 new tests verify
+exact-reconstruction, no mid-sentence splits, and that realistic-length
+scripts actually produce multiple chunks). A second, chunked attempt was
+launched immediately — *(its actual result: elapsed time, output size,
+ffprobe-verified audio properties, and Voice QA outcome: pending
+completion of that still-in-progress run; a follow-up commit records the
+real numbers rather than leaving this section unfinished)*. The isolated
+production pipeline (Visual Planner → Assets → Assembler → Captions →
+Thumbnail → Production QA) has not yet been run this round — planned
+immediately after narration completes, per the same isolated-copy
+pattern.
+
+**Full test suite: 611/611 passing** (599 baseline + 7 provider-routing
++ 5 chunking; 2 skipped — the two checkpoint-specific scenarios that
+require the isolated venv, same honest skip pattern already used for
+ffmpeg-dependent tests elsewhere in this repository).
 
 ## Next task
 

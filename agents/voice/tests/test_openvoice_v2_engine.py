@@ -18,6 +18,7 @@ from ..src import engines
 from ..src.engines.openvoice_v2_engine import (
     ENGINE_NAME,
     OpenVoiceV2Engine,
+    _chunk_narration,
     _melo_language_and_speaker,
 )
 from ..src.owner_voice import (
@@ -66,6 +67,48 @@ class LanguageMappingTests(unittest.TestCase):
     def test_unrecognized_language_defaults_to_english(self):
         config = OwnerVoiceConfig(language="xx")
         self.assertEqual(_melo_language_and_speaker(config)[0], "EN")
+
+
+class NarrationChunkingTests(unittest.TestCase):
+    """_chunk_narration() bounds peak memory for long scripts (see its own
+    module-level comment — a real OOM was reproduced and fixed by
+    chunking) without ever altering narration content: every chunk is
+    real sentences from the input, in order, and rejoining them with
+    single spaces reconstructs the exact original text.
+    """
+
+    def test_reconstructs_original_text_exactly(self):
+        text = (
+            "In 1347, a disease killed up to 60% of the people. What if the "
+            "people living through it had known? Between 1347 and 1351, the "
+            "Black Death swept across Europe."
+        )
+        chunks = _chunk_narration(text, max_words=10)
+        self.assertGreater(len(chunks), 1)
+        self.assertEqual(" ".join(chunks), text)
+
+    def test_never_splits_a_sentence_in_half(self):
+        text = "First sentence here. Second sentence here. Third sentence here."
+        chunks = _chunk_narration(text, max_words=3)
+        for chunk in chunks:
+            self.assertTrue(chunk.rstrip().endswith("."))
+
+    def test_single_short_sentence_is_one_chunk(self):
+        self.assertEqual(_chunk_narration("Just one short sentence.", max_words=100), ["Just one short sentence."])
+
+    def test_empty_text_produces_no_chunks(self):
+        self.assertEqual(_chunk_narration("   "), [])
+
+    def test_long_narration_produces_multiple_bounded_chunks(self):
+        # A ~470-word script (Episode 1's real approximate length) must
+        # split into more than one chunk at the engine's real default —
+        # proof the memory-bounding fix actually activates for
+        # realistic narration lengths, not just in a contrived test.
+        sentence = "This is a representative sentence with several words in it."
+        text = " ".join([sentence] * 40)  # ~440 words
+        chunks = _chunk_narration(text)
+        self.assertGreater(len(chunks), 1)
+        self.assertEqual(" ".join(chunks), text)
 
 
 class EngineIdentityTests(unittest.TestCase):

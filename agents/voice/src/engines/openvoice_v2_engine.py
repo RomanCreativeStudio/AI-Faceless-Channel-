@@ -36,7 +36,9 @@ everywhere else in this codebase.
 """
 from __future__ import annotations
 
+import gc
 import os
+import re
 import tempfile
 import wave
 from pathlib import Path
@@ -60,6 +62,47 @@ _DEFAULT_SPEAKER_KEY_BY_LANGUAGE = {
 # English accents — config.speaking_style may name one of these
 # directly (e.g. "en-us") to override the language's own default.
 _KNOWN_EN_SPEAKER_KEYS = {"en-us", "en-br", "en-au", "en-india", "en-default", "en-newest"}
+
+
+# A full episode's narration synthesized in one MeloTTS + ToneColorConverter
+# call was observed to exhaust this project's sandboxed environment's
+# memory ceiling (real, reproduced OOM-kill during real testing — see
+# STATE.md / OPENVOICE_V2_TEST_REPORT.md's "Full Episode 1 narration"
+# section for the exact evidence). Splitting into bounded-size chunks and
+# synthesizing/converting each independently, then concatenating the
+# resulting PCM frames, keeps peak memory bounded regardless of total
+# script length. This is purely an internal execution detail: the
+# `narration_text` argument `synthesize()` receives is never altered,
+# reordered, or dropped — only the audio it produces is assembled from
+# pieces, with no effect on what run_voice_generation()/OwnerVoiceProvider
+# record as the narration/script-hash relationship (those never see or
+# depend on how the engine internally chose to synthesize the audio).
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+_DEFAULT_CHUNK_MAX_WORDS = 100
+
+
+def _chunk_narration(text: str, max_words: int = _DEFAULT_CHUNK_MAX_WORDS) -> list[str]:
+    """Greedily groups whole sentences (never splits mid-sentence) into
+    chunks of at most `max_words` words each, in original order. Every
+    chunk is an exact, verbatim substring-derived piece of `text` — no
+    word is ever added, removed, or reordered across this function."""
+    sentences = [s for s in _SENTENCE_SPLIT_RE.split(text.strip()) if s.strip()]
+    if not sentences:
+        return [text] if text.strip() else []
+    chunks: list[str] = []
+    current: list[str] = []
+    current_words = 0
+    for sentence in sentences:
+        words = len(sentence.split())
+        if current and current_words + words > max_words:
+            chunks.append(" ".join(current))
+            current = []
+            current_words = 0
+        current.append(sentence)
+        current_words += words
+    if current:
+        chunks.append(" ".join(current))
+    return chunks
 
 
 def _melo_language_and_speaker(config: OwnerVoiceConfig) -> tuple[str, str]:
@@ -148,10 +191,12 @@ class OpenVoiceV2Engine:
             )
         source_se = torch.load(str(speaker_embedding_path), map_location=self.device)
 
+        chunks = _chunk_narration(narration_text)
+        if not chunks:
+            raise RuntimeError("OpenVoice V2 engine received empty narration text")
+
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            base_audio_path = tmp_path / "base.wav"
-            output_path = tmp_path / "output.wav"
 
             # The only lines in this whole adapter (or anywhere in this
             # codebase) that read the owner's private sample's contents.
@@ -176,18 +221,62 @@ class OpenVoiceV2Engine:
                 raise RuntimeError(
                     f"MeloTTS has no speaker matching {speaker_key!r} for language {melo_language!r}"
                 )
-            model.tts_to_file(narration_text, speaker_ids[melo_speaker_key], str(base_audio_path), speed=1.0)
 
-            converter.convert(
-                audio_src_path=str(base_audio_path),
-                src_se=source_se,
-                tgt_se=target_se,
-                output_path=str(output_path),
-                message="@MyShell",
-            )
+            # Synthesized and converted one bounded-size chunk at a time
+            # (see _chunk_narration's docstring) — each chunk's
+            # intermediate files and in-memory tensors are released
+            # before the next chunk starts, keeping peak memory roughly
+            # constant regardless of total narration length, rather than
+            # holding the entire episode's audio/spectral state in memory
+            # simultaneously (the real, reproduced failure mode this was
+            # built to fix).
+            wav_params = None
+            combined_frames = bytearray()
+            for index, chunk_text in enumerate(chunks):
+                base_audio_path = tmp_path / f"base_{index}.wav"
+                chunk_output_path = tmp_path / f"output_{index}.wav"
 
-            if not output_path.is_file():
-                raise RuntimeError("OpenVoice V2 conversion reported success but produced no output file")
+                model.tts_to_file(chunk_text, speaker_ids[melo_speaker_key], str(base_audio_path), speed=1.0)
+                converter.convert(
+                    audio_src_path=str(base_audio_path),
+                    src_se=source_se,
+                    tgt_se=target_se,
+                    output_path=str(chunk_output_path),
+                    message="@MyShell",
+                )
+                if not chunk_output_path.is_file():
+                    raise RuntimeError(
+                        f"OpenVoice V2 conversion reported success but produced no output "
+                        f"file for narration chunk {index + 1}/{len(chunks)}"
+                    )
+                with wave.open(str(chunk_output_path), "rb") as wav_file:
+                    params = wav_file.getparams()
+                    frames = wav_file.readframes(wav_file.getnframes())
+                if wav_params is None:
+                    wav_params = params
+                elif (params.nchannels, params.sampwidth, params.framerate) != (
+                    wav_params.nchannels, wav_params.sampwidth, wav_params.framerate,
+                ):
+                    raise RuntimeError(
+                        f"OpenVoice V2 chunk {index + 1}/{len(chunks)} produced audio with "
+                        "different format than earlier chunks — refusing to concatenate "
+                        "mismatched audio"
+                    )
+                combined_frames += frames
+
+                base_audio_path.unlink(missing_ok=True)
+                chunk_output_path.unlink(missing_ok=True)
+                del frames
+                gc.collect()
+
+            if wav_params is None or not combined_frames:
+                raise RuntimeError("OpenVoice V2 produced no audio output across any narration chunk")
+
+            output_path = tmp_path / "output_combined.wav"
+            with wave.open(str(output_path), "wb") as wav_file:
+                wav_file.setparams(wav_params)
+                wav_file.writeframes(bytes(combined_frames))
+
             audio_bytes = output_path.read_bytes()
             with wave.open(str(output_path), "rb") as wav_file:
                 frames = wav_file.getnframes()

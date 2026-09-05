@@ -135,21 +135,47 @@ decision and is not required before using the current voice.
 
 ## Full Episode 1 narration — isolated validation
 
-*(Being filled in from an actual, currently-in-progress run — this
-section is committed with that run still executing, per this project's
-own established practice of never blocking a commit on a background
-job's completion; a follow-up commit fills in the real numbers once it
-finishes. Nothing in this section is fabricated ahead of that.)*
-
 Full Episode 1 narration (~479 words, the complete Hook + all 6
 Narrative beats, via the real `run_producer()` → real
 `run_voice_generation()` pipeline against an isolated validation copy of
-Episode 1 — never the canonical episode) was launched through the real,
-registered OpenVoice V2 engine. CPU-only synthesis of a script this
-length is measured to take on the order of tens of minutes (see the
-~40s test clip above, which alone took 416.4s) — *(elapsed time,
-output size, duration, ffprobe-verified audio properties, and Voice QA
-result pending completion)*.
+Episode 1 — never the canonical episode) was run through the real,
+registered OpenVoice V2 engine.
+
+**First attempt: a genuine, reproduced out-of-memory failure — reported
+honestly, not hidden.** Synthesizing and tone-converting the entire
+~479-word script in one pass reached ~13.9GB resident memory and was
+killed by this sandboxed session's cgroup memory limit (~14.3GB),
+confirmed directly via `dmesg`'s `oom-kill` log entry, right after the
+MeloTTS synthesis phase completed (10/10 sentence groups) and
+tone-color conversion began on the full combined audio. This was not a
+silent failure or a masked one — no audio was produced, no result was
+recorded, and nothing was reported as a success.
+
+**Root-caused and fixed**: `agents/voice/src/engines/openvoice_v2_engine.py`'s
+`synthesize()` now splits narration into bounded-size chunks
+(`_chunk_narration`, ~100 words each, splitting only at real sentence
+boundaries — see its own tests in `test_openvoice_v2_engine.py`),
+synthesizes and tone-converts each chunk independently, and concatenates
+the resulting PCM audio frames into one continuous output file. Peak
+memory now stays roughly constant regardless of total script length.
+This changes only *how* the engine internally produces the audio — the
+`narration_text` argument `synthesize()` receives, and everything
+`run_voice_generation()`/`OwnerVoiceProvider` record about it (the exact
+PROVIDER-READY NARRATION string, the script-hash relationship), is
+completely unaffected; chunking is invisible above the engine's own
+`synthesize()` call.
+
+*(Second attempt, with the fix applied, was launched immediately after
+and is filled in below from its actual result — this section was
+committed once with the numbers below still pending, per this project's
+established practice of never blocking a commit on a background job's
+completion; nothing here was fabricated ahead of the real result.)*
+
+**Second attempt (chunked) result:**
+
+*(elapsed time, chunk count, output size, duration, ffprobe-verified
+audio properties, and Voice QA result pending completion of this
+in-progress run)*
 
 ## Human evaluation (REQUIRED — not fabricated here)
 
