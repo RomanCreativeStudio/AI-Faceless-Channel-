@@ -1803,7 +1803,28 @@ MeloTTS's nor OpenVoice's own code wraps in `no_grad`/`inference_mode`
 internally. **Fixed** by wrapping the per-chunk synthesis/conversion
 loop in `torch.inference_mode()` — a second, independent fix layered on
 top of chunking, again with no effect on narration content or recorded
-pipeline fields. A third attempt, with both fixes applied, was launched
+pipeline fields.
+
+**A third attempt, with both fixes applied, was ALSO genuinely
+OOM-killed** — at essentially the identical ~13.9GB ceiling and stopping
+point (5 chunks in) as the second attempt. `inference_mode()` did not
+fix it, ruling out autograd-graph retention as the (sole) cause and
+pointing to memory retained inside PyTorch's/MeloTTS's/OpenVoice's own
+native/allocator internals across repeated in-process calls — not
+forceable free from within the same process. **Fixed conclusively** by
+running each chunk's synthesis/conversion in its own **subprocess**
+(`_openvoice_v2_chunk_worker.py`, invoked via `subprocess.run`) — a
+subprocess's memory is unconditionally reclaimed by the OS on exit,
+regardless of the exact internal cause. The worker receives only a
+checkpoint dir, device, language/speaker identifiers, chunk text, and an
+already-computed target-embedding path — never the owner's raw sample
+path (verified by a dedicated test). Verified standalone first: the
+worker was invoked directly against a smoke-test sentence and the
+owner's real sample-derived embedding, producing a valid 120,364-byte
+WAV with exit code 0, before relying on it for the full run. 4 new tests
+cover the worker's existence, no network-capable imports, no
+sample-path argument, and that `synthesize()` genuinely delegates to it.
+A fourth attempt, with subprocess isolation applied, was launched
 immediately — *(its actual result: elapsed time, output size,
 ffprobe-verified audio properties, and Voice QA outcome: pending
 completion of that still-in-progress run; a follow-up commit records the
@@ -1813,10 +1834,11 @@ Thumbnail → Production QA) has not yet been run this round — planned
 immediately after narration completes, per the same isolated-copy
 pattern.
 
-**Full test suite: 611/611 passing** (599 baseline + 7 provider-routing
-+ 5 chunking; 2 skipped — the two checkpoint-specific scenarios that
-require the isolated venv, same honest skip pattern already used for
-ffmpeg-dependent tests elsewhere in this repository).
+**Full test suite: 615/615 passing** (599 baseline + 7 provider-routing
++ 5 chunking + 4 subprocess-worker; 2 skipped — the two
+checkpoint-specific scenarios that require the isolated venv, same
+honest skip pattern already used for ffmpeg-dependent tests elsewhere in
+this repository).
 
 ## Next task
 

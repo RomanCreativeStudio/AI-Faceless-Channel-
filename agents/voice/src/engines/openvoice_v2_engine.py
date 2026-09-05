@@ -36,14 +36,17 @@ everywhere else in this codebase.
 """
 from __future__ import annotations
 
-import gc
 import os
 import re
+import subprocess
+import sys
 import tempfile
 import wave
 from pathlib import Path
 
 from ..owner_voice import EngineSynthesisResult, OwnerVoiceConfig, register_owner_voice_engine
+
+_CHUNK_WORKER_PATH = Path(__file__).parent / "_openvoice_v2_chunk_worker.py"
 
 ENGINE_NAME = "openvoice-v2"
 
@@ -178,7 +181,6 @@ class OpenVoiceV2Engine:
             raise RuntimeError("OpenVoice V2 engine requires a real, existing owner voice sample")
 
         import torch
-        from melo.api import TTS
         from openvoice import se_extractor
 
         converter = self._load_converter()
@@ -189,7 +191,6 @@ class OpenVoiceV2Engine:
             raise RuntimeError(
                 f"no base speaker embedding found for {speaker_key!r} at {speaker_embedding_path}"
             )
-        source_se = torch.load(str(speaker_embedding_path), map_location=self.device)
 
         chunks = _chunk_narration(narration_text)
         if not chunks:
@@ -211,72 +212,71 @@ class OpenVoiceV2Engine:
             target_se, _ = se_extractor.get_se(
                 str(config.sample_path), converter, target_dir=str(tmp_path / "se_processing"), vad=True,
             )
+            # Persisted only as a derived voice-embedding TENSOR (never
+            # the raw sample itself) to this same ephemeral tempdir, so
+            # the per-chunk subprocess below can load it without ever
+            # touching config.sample_path — deleted with everything else
+            # when this `with` block exits.
+            target_se_path = tmp_path / "target_se.pt"
+            torch.save(target_se, str(target_se_path))
 
-            model = TTS(language=melo_language, device=self.device)
-            speaker_ids = model.hps.data.spk2id
-            melo_speaker_key = next(
-                (k for k in speaker_ids.keys() if k.lower().replace("_", "-") == speaker_key), None,
-            )
-            if melo_speaker_key is None:
-                raise RuntimeError(
-                    f"MeloTTS has no speaker matching {speaker_key!r} for language {melo_language!r}"
-                )
-
-            # Synthesized and converted one bounded-size chunk at a time
-            # (see _chunk_narration's docstring), each inside
-            # torch.inference_mode(). A first, non-chunked version of
-            # this code was reproducibly OOM-killed on a full episode
-            # script (see STATE.md/OPENVOICE_V2_TEST_REPORT.md for the
-            # dmesg evidence); chunking alone was NOT sufficient — a
-            # second attempt, chunked but without inference_mode(), was
-            # ALSO OOM-killed at essentially the same total memory,
-            # after processing more chunks than fit in one pass. That
-            # pattern (memory tied to total text/forward-passes
-            # processed, not to any one call's audio size) is the
-            # signature of PyTorch retaining autograd graphs across
-            # inference calls neither MeloTTS's nor OpenVoice's own code
-            # wraps in no_grad/inference_mode internally. Explicitly
-            # disabling gradient tracking here removes that
-            # accumulation regardless of chunk count.
+            # Each chunk is synthesized and tone-converted in its OWN
+            # subprocess (see _openvoice_v2_chunk_worker.py's module
+            # docstring for why): THREE separate real attempts —
+            # unchunked, chunked, and chunked + torch.inference_mode() —
+            # were each independently OOM-killed at the same ~13.9GB
+            # ceiling (confirmed via dmesg each time), pointing to
+            # memory retained inside PyTorch's/MeloTTS's/OpenVoice's own
+            # internals across repeated in-process calls, not something
+            # `del`/`gc.collect()`/`inference_mode()` from within the
+            # same process could force free. A subprocess's memory is
+            # unconditionally reclaimed by the OS the instant it exits,
+            # regardless of the exact cause — the only fix guaranteed to
+            # work without depending on library-internal behavior this
+            # adapter doesn't control.
             wav_params = None
             combined_frames = bytearray()
-            with torch.inference_mode():
-                for index, chunk_text in enumerate(chunks):
-                    base_audio_path = tmp_path / f"base_{index}.wav"
-                    chunk_output_path = tmp_path / f"output_{index}.wav"
+            for index, chunk_text in enumerate(chunks):
+                text_path = tmp_path / f"chunk_{index}.txt"
+                chunk_output_path = tmp_path / f"output_{index}.wav"
+                text_path.write_text(chunk_text, encoding="utf-8")
 
-                    model.tts_to_file(chunk_text, speaker_ids[melo_speaker_key], str(base_audio_path), speed=1.0)
-                    converter.convert(
-                        audio_src_path=str(base_audio_path),
-                        src_se=source_se,
-                        tgt_se=target_se,
-                        output_path=str(chunk_output_path),
-                        message="@MyShell",
+                proc = subprocess.run(
+                    [
+                        sys.executable, str(_CHUNK_WORKER_PATH),
+                        "--checkpoint-dir", str(self.checkpoint_dir),
+                        "--device", self.device,
+                        "--melo-language", melo_language,
+                        "--speaker-key", speaker_key,
+                        "--text-file", str(text_path),
+                        "--target-se-path", str(target_se_path),
+                        "--output-path", str(chunk_output_path),
+                    ],
+                    capture_output=True, text=True,
+                )
+                if proc.returncode != 0 or not chunk_output_path.is_file():
+                    stderr_tail = (proc.stderr or "").strip().splitlines()[-1:] or ["(no stderr)"]
+                    raise RuntimeError(
+                        f"OpenVoice V2 chunk worker failed for narration chunk "
+                        f"{index + 1}/{len(chunks)} (exit code {proc.returncode}): {stderr_tail[0]}"
                     )
-                    if not chunk_output_path.is_file():
-                        raise RuntimeError(
-                            f"OpenVoice V2 conversion reported success but produced no output "
-                            f"file for narration chunk {index + 1}/{len(chunks)}"
-                        )
-                    with wave.open(str(chunk_output_path), "rb") as wav_file:
-                        params = wav_file.getparams()
-                        frames = wav_file.readframes(wav_file.getnframes())
-                    if wav_params is None:
-                        wav_params = params
-                    elif (params.nchannels, params.sampwidth, params.framerate) != (
-                        wav_params.nchannels, wav_params.sampwidth, wav_params.framerate,
-                    ):
-                        raise RuntimeError(
-                            f"OpenVoice V2 chunk {index + 1}/{len(chunks)} produced audio with "
-                            "different format than earlier chunks — refusing to concatenate "
-                            "mismatched audio"
-                        )
-                    combined_frames += frames
+                with wave.open(str(chunk_output_path), "rb") as wav_file:
+                    params = wav_file.getparams()
+                    frames = wav_file.readframes(wav_file.getnframes())
+                if wav_params is None:
+                    wav_params = params
+                elif (params.nchannels, params.sampwidth, params.framerate) != (
+                    wav_params.nchannels, wav_params.sampwidth, wav_params.framerate,
+                ):
+                    raise RuntimeError(
+                        f"OpenVoice V2 chunk {index + 1}/{len(chunks)} produced audio with "
+                        "different format than earlier chunks — refusing to concatenate "
+                        "mismatched audio"
+                    )
+                combined_frames += frames
 
-                    base_audio_path.unlink(missing_ok=True)
-                    chunk_output_path.unlink(missing_ok=True)
-                    del frames
-                    gc.collect()
+                text_path.unlink(missing_ok=True)
+                chunk_output_path.unlink(missing_ok=True)
 
             if wav_params is None or not combined_frames:
                 raise RuntimeError("OpenVoice V2 produced no audio output across any narration chunk")

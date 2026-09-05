@@ -186,13 +186,46 @@ accumulating *across* chunks) — again purely an internal execution
 detail with no effect on the narration text or the pipeline's own
 recorded fields.
 
-*(Third attempt, with both fixes applied, was launched immediately after
-and is filled in below from its actual result — this section was
-committed with the numbers below still pending, per this project's
-established practice of never blocking a commit on a background job's
-completion; nothing here was fabricated ahead of the real result.)*
+**Third attempt: also genuinely OOM-killed, at essentially the identical
+~13.9GB ceiling and stopping point (5 chunks in) as the second
+attempt.** `torch.inference_mode()` did not fix it — memory grew and hit
+the same wall regardless. This ruled out autograd-graph retention as the
+(sole) cause and pointed instead to memory retained inside PyTorch's/
+MeloTTS's/OpenVoice's own native/allocator internals across repeated
+in-process calls — not something forceable from within the same process
+via `del`/`gc.collect()`/`inference_mode()`.
 
-**Third attempt (chunked + inference_mode) result:**
+**Root-caused conclusively and fixed**: each chunk's synthesis and
+tone-conversion now runs in its own **subprocess**
+(`agents/voice/src/engines/_openvoice_v2_chunk_worker.py`, invoked via
+`subprocess.run` from `synthesize()`) rather than in-process. A
+subprocess's memory is unconditionally reclaimed by the OS the instant
+it exits, regardless of the exact internal cause — this does not depend
+on correctly guessing which library's internals were responsible. The
+worker receives only a checkpoint directory, device, MeloTTS language/
+speaker identifiers, a chunk-text file, and a path to an
+already-computed target speaker embedding (`target_se`, saved once by
+the parent to the same ephemeral tempdir) — it never receives, reads, or
+could leak the owner's raw sample path (verified by a dedicated test:
+`test_worker_module_never_declares_a_sample_path_argument`). Verified
+standalone before the full run: the worker script was invoked directly
+against a short smoke-test sentence and the owner's real sample-derived
+embedding, producing a valid 120,364-byte WAV file with exit code 0.
+
+4 new tests (`ChunkWorkerSubprocessTests`) verify the worker module
+exists with a `main()` entry point, has no network-capable imports, and
+never declares a sample-path argument; a further test confirms
+`synthesize()` genuinely delegates to it via `subprocess.run` rather
+than reverting to in-process calls.
+
+*(Fourth attempt, with subprocess isolation applied, was launched
+immediately after and is filled in below from its actual result — this
+section was committed with the numbers below still pending, per this
+project's established practice of never blocking a commit on a
+background job's completion; nothing here was fabricated ahead of the
+real result.)*
+
+**Fourth attempt (subprocess-isolated chunks) result:**
 
 *(elapsed time, chunk count, output size, duration, ffprobe-verified
 audio properties, and Voice QA result pending completion of this

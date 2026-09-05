@@ -34,6 +34,7 @@ from ..src.pipeline import run_voice_generation
 from .builders import build_produced_item
 
 _MODULE_PATH = Path(engines.__file__).parent / "openvoice_v2_engine.py"
+_WORKER_MODULE_PATH = Path(engines.__file__).parent / "_openvoice_v2_chunk_worker.py"
 
 
 class _RegistryIsolated(unittest.TestCase):
@@ -109,6 +110,40 @@ class NarrationChunkingTests(unittest.TestCase):
         chunks = _chunk_narration(text)
         self.assertGreater(len(chunks), 1)
         self.assertEqual(" ".join(chunks), text)
+
+
+class ChunkWorkerSubprocessTests(unittest.TestCase):
+    """The per-chunk synthesis worker (_openvoice_v2_chunk_worker.py,
+    invoked as a subprocess by synthesize() — see that module's own
+    docstring for why: three real, independently-reproduced OOM kills at
+    the same memory ceiling, even with chunking and inference_mode()
+    already applied) must never receive or be able to leak the owner's
+    raw sample path, and must have no network-capable imports of its own.
+    """
+
+    def test_worker_module_exists_and_has_a_main_entry_point(self):
+        self.assertTrue(_WORKER_MODULE_PATH.is_file())
+        source = _WORKER_MODULE_PATH.read_text(encoding="utf-8")
+        self.assertIn("def main(", source)
+
+    def test_worker_module_has_no_network_capable_imports_at_module_level(self):
+        source = _WORKER_MODULE_PATH.read_text(encoding="utf-8")
+        for forbidden in ("import urllib", "import requests", "import http.client", "import socket"):
+            self.assertNotIn(forbidden, source)
+
+    def test_worker_module_never_declares_a_sample_path_argument(self):
+        # The worker receives only a checkpoint dir, device, language/
+        # speaker identifiers, chunk text, a target-embedding path, and
+        # an output path — never the owner's raw sample path. Asserted
+        # structurally so this stays true even if the worker is edited.
+        source = _WORKER_MODULE_PATH.read_text(encoding="utf-8")
+        self.assertNotIn("sample-path", source)
+        self.assertNotIn("sample_path", source)
+
+    def test_engine_module_invokes_the_worker_via_subprocess_not_in_process_synthesis(self):
+        source = _MODULE_PATH.read_text(encoding="utf-8")
+        self.assertIn("subprocess.run", source)
+        self.assertIn("_CHUNK_WORKER_PATH", source)
 
 
 class EngineIdentityTests(unittest.TestCase):
