@@ -373,15 +373,26 @@ document — nothing here reads or affects that state.
 ## 10. Machine-readable decision state
 
 ```
-OWNER_DECISION_REQUIRED
-SELECTED_PROVIDER = UNSELECTED
+OWNER_DECISION_RECORDED
+SELECTED_PROVIDER = OpenVoice V2 (local, agents/voice/src/engines/openvoice_v2_engine.py)
+VOICE_DECISION = USE_FOR_PRODUCTION
+VOICE_QUALITY_STATUS = ACCEPTABLE_FOR_PRODUCTION
+VOICE_IMPROVEMENT = FUTURE_ITERATION
 SAMPLE_STATUS = TECHNICALLY_USABLE_FOR_TEST
-PRODUCTION_SAMPLE_RECOMMENDATION = 2-5 MINUTES
+PRODUCTION_SAMPLE_RECOMMENDATION = 2-5 MINUTES  (still not required before use)
 EXTERNAL_UPLOAD_AUTHORIZED = FALSE
 ```
 
 This block is descriptive documentation, not a config file any code
-reads — no automation may flip `EXTERNAL_UPLOAD_AUTHORIZED` or populate
-`SELECTED_PROVIDER` on its own. Update it by hand only once the owner
-has actually made and communicated a decision; until then, it stays
-exactly as shown here.
+reads — no automation ever flipped `EXTERNAL_UPLOAD_AUTHORIZED` or
+populated `SELECTED_PROVIDER`; both were updated by hand only after the
+owner actually listened to a generated sample
+(`agents/voice/OPENVOICE_V2_TEST_REPORT.md`) and communicated this
+decision. `EXTERNAL_UPLOAD_AUTHORIZED` stays `FALSE`: OpenVoice V2 runs
+entirely locally, so no external upload was ever needed for this
+decision, and none is authorized now either — a future cloud provider
+would still require its own, separate authorization. The owner's stated
+reasoning: the result is recognizable as their voice and acceptable for
+production, while acknowledging the clone can be improved later — the
+2–5 minute sample recommendation remains a future-iteration target, not
+a blocker to using the current voice now.

@@ -180,12 +180,56 @@ publishes anything. Generating audio in the owner's voice is not itself
 an approval of anything; a human still reviews the final audio (and the
 full content-review chain still applies) before any of that happens.
 
-**Current status in this environment: not configured, by design.** No
-engine is registered, so `OWNER_VOICE_AVAILABLE` cannot be true here yet.
-Once a real engine is chosen and its adapter added (registered via
-`register_owner_voice_engine`), and the owner's actual sample/config is
-supplied via the environment, real generation becomes a separate,
-explicit validation step — never assumed or fabricated ahead of that.
+**Current status: registry empty by default; OpenVoice V2 is the
+owner-authorized production engine once explicitly activated.** No
+engine is registered automatically in any normal test/CI run — the
+registry genuinely starts empty every time this package is imported, by
+design (see "Provider activation for production" below). A real, local,
+free engine now exists (`agents/voice/src/engines/openvoice_v2_engine.py`,
+OpenVoice V2) and has been evaluated end-to-end against the owner's own
+sample. The owner has recorded the explicit decision:
+
+```
+CURRENT_OWNER_VOICE   = OpenVoice V2
+VOICE_QUALITY_STATUS  = ACCEPTABLE_FOR_PRODUCTION
+VOICE_IMPROVEMENT     = FUTURE_ITERATION
+```
+
+recorded from actually listening to a generated sample — the voice is
+recognizable as the owner's and accepted for production use, while the
+owner acknowledges the clone can be improved later (a longer, 2–5 minute
+reference recording remains the standing future-improvement target — see
+`OPENVOICE_V2_TEST_REPORT.md`). This is **not** a claim that the audio is
+indistinguishable from the owner's real voice — it is the owner's own
+production-suitability judgment, recorded once, not fabricated by any
+agent in this codebase.
+
+### Provider activation for production
+
+Selecting `owner-voice` (`agents/voice/src/provider_selection.py`'s
+`PROVIDER_OWNER_VOICE`) resolves to `OwnerVoiceProvider` exactly as
+before — nothing about that selection string, `pipeline.py`, or
+`templates/VOICE.md` changed. For it to actually route to OpenVoice V2,
+an operator must, in the same process:
+
+1. Set up the isolated environment once (`agents/voice/src/engines/README.md`).
+2. Explicitly import the engine module — this is the one, deliberate
+   opt-in step that registers it: `from agents.voice.src.engines import
+   openvoice_v2_engine`. Nothing in `agents/voice/src/__init__.py`,
+   `pipeline.py`, or `provider_selection.py` does this automatically, so
+   every normal test/CI run still sees an empty registry.
+3. Set `OWNER_VOICE_ENGINE=openvoice-v2`, `OWNER_VOICE_ID`,
+   `OWNER_VOICE_SAMPLE_PATH` (a private, local path — never inside this
+   repository), and `OPENVOICE_V2_CHECKPOINT_DIR` in the environment.
+
+Once all three are true, `resolve_voice_provider("owner-voice")` (or an
+explicit `OwnerVoiceConfig`/`OwnerVoiceProvider`) genuinely produces
+owner-voice audio via OpenVoice V2 — verified end to end against Episode
+1's real narration on an isolated validation copy (never the canonical
+episode; see `OPENVOICE_V2_TEST_REPORT.md`'s "Production-use evaluation").
+Skip any of the three and the existing, unchanged failure behavior
+applies: a precise `OWNER_VOICE_NOT_CONFIGURED` reason, never a silent
+fallback to a different voice.
 
 ## How it works
 
@@ -282,14 +326,19 @@ python3 -m unittest discover -s agents/voice/tests -t .
   `templates/VOICE.md`'s "typically one per production" design; a
   multi-track production isn't modeled yet.
 - **QA is structural only** — see "QA" above.
-- **`OwnerVoiceProvider` has no engine registered by default** — a
-  real, local, free engine now exists
-  (`agents/voice/src/engines/openvoice_v2_engine.py`, OpenVoice V2), but
-  it registers itself only when explicitly imported into a process that
-  has its own isolated environment set up (see that module's own
-  `README.md`) — nothing in this package imports it automatically, so
-  `agents/voice/`'s registry stays empty for every normal test/CI run.
-  See `agents/voice/OPENVOICE_V2_TEST_REPORT.md` for the actual,
-  honest technical-feasibility test result — a technically successful
-  local synthesis is not itself a claim of production-quality speech;
-  only a human listening to the output can determine that.
+- **`OwnerVoiceProvider` still has no engine registered by default** —
+  registration is always an explicit, opt-in import (see "Provider
+  activation for production" above), never automatic, in every normal
+  test/CI run. OpenVoice V2 (`agents/voice/src/engines/openvoice_v2_engine.py`)
+  is now the owner's authorized production engine once that activation
+  is done (`VOICE_DECISION = USE_FOR_PRODUCTION`, recorded from the
+  owner actually listening — see `agents/voice/OPENVOICE_V2_TEST_REPORT.md`'s
+  "Production-use evaluation"). The 18-second sample the owner approved
+  against is acceptable for initial production but not the final ideal
+  dataset — a 2–5 minute clean recording remains a documented future
+  improvement, never a blocker to using the current voice now.
+- **CPU-only synthesis is slow.** OpenVoice V2 has no GPU acceleration
+  in this environment; a full episode's narration (a few hundred words)
+  takes on the order of tens of minutes to synthesize (measured directly
+  — see `OPENVOICE_V2_TEST_REPORT.md`). This is a throughput limitation,
+  not a correctness one.

@@ -1727,29 +1727,85 @@ overall decision) are deliberately left blank for the owner — nothing
 here fabricates that judgment. Nothing about this experiment touches
 Episode 1, Safety, Originality, or any approval state.
 
+## Completed (Phase 8 follow-up 9: OpenVoice V2 activated for production; VOICE_DECISION = USE_FOR_PRODUCTION)
+
+**The owner recorded a real decision** after listening to the previous
+follow-up's test clip: the voice is recognizable as their own and
+acceptable for production, while acknowledging the clone can be
+improved later. Recorded as `CURRENT_OWNER_VOICE = OpenVoice V2`,
+`VOICE_QUALITY_STATUS = ACCEPTABLE_FOR_PRODUCTION`, `VOICE_IMPROVEMENT =
+FUTURE_ITERATION` in `agents/voice/PROVIDER_EVALUATION.md`'s Section 10
+and `agents/voice/OPENVOICE_V2_TEST_REPORT.md`'s new "Production-use
+evaluation" section — not fabricated: fields the owner didn't
+individually rate are marked as such, not guessed. This decision does
+not reopen or restate — it authorizes using OpenVoice V2 going forward.
+
+**No architecture was redesigned.** `OwnerVoiceEngine`,
+`OwnerVoiceProvider`, and `provider_selection.resolve_voice_provider()`
+are exactly as Phase 8 follow-up 7 left them. Selecting `"owner-voice"`
+already routed to whatever engine `OwnerVoiceConfig` names; the only
+thing that changed this round is that an operator can now genuinely
+complete the three-step activation (isolated environment set up +
+explicit `from agents.voice.src.engines import openvoice_v2_engine`
+import + `OWNER_VOICE_ENGINE=openvoice-v2` and related env vars) and
+have it actually work — verified end to end, not just asserted. The
+registry still starts empty in every normal test/CI run; nothing
+auto-imports the engine module.
+
+**7 new regression tests** (`agents/voice/tests/test_openvoice_v2_production_activation.py`):
+`resolve_voice_provider("owner-voice", ...)` genuinely routes to a
+provider bound to the registered OpenVoice V2 engine; the selection
+layer never bypasses the engine's own real failure behavior (still no
+silent fallback); no publish-shaped attribute is reachable from the
+resolved provider; invalid-checkpoint and missing-checkpoint-dir
+scenarios are reported precisely (verified for real inside the isolated
+venv, where torch/openvoice/melo are actually importable — skipped, not
+faked, in the normal test environment that lacks them); and the
+pre-existing content-approval gate still blocks a fully-configured
+OpenVoice V2 provider from generating against an unapproved item, now
+reached through the production selection path rather than only the
+provider's own direct constructor.
+
+**Isolated Episode 1 production validation** (never the canonical
+episode — a fresh copy under this session's own scratch directory,
+`APPROVED` flipped only in that copy, confirmed via `git status
+--porcelain` that the canonical `content/what-if/wi-20260904-...-ep1/`
+directory was never touched): the real `run_producer()` ran first
+(7 scenes produced), then the real, registered OpenVoice V2 engine was
+invoked through the real `run_voice_generation()` pipeline against the
+full Episode 1 script (~479 words, all 6 beats + Hook, not just a short
+test clip) — *(elapsed time, output size, ffprobe-verified audio
+properties, and Voice QA result: pending completion of that
+still-in-progress run; a follow-up commit records the actual numbers
+rather than leaving this section unfinished)*. The isolated production
+pipeline (Visual Planner → Assets → Assembler → Captions → Thumbnail →
+Production QA) has not yet been run this round — planned immediately
+after narration completes, per the same isolated-copy pattern.
+
+**Full test suite: 606/606 passing** (599 baseline + 7 new; 2 skipped —
+the two checkpoint-specific scenarios above that require the isolated
+venv, same honest skip pattern already used for ffmpeg-dependent tests
+elsewhere in this repository).
+
 ## Next task
 
-No further phase was specified as the "exact next task" beyond this
-report. Two independent tracks are now both at the cleanest state this
-system can reach on its own authority, and neither should advance
-further without a human action first:
-
-1. **Content review**: Episode 1 needs the human owner to read
+1. **Content review**: Episode 1 still needs the human owner to read
    `HUMAN_REVIEW.md` and record a Safety `CLEARED`/`NOT_CLEARED` decision
    (`agents/safety/src/human_signoff_cli.py`). Once recorded, the next
    session should run `continue_after_human_safety_review()` (Originality
    on `CLEARED`, nothing further on `NOT_CLEARED`) and go no further.
-2. **Owner voice**: needs a human decision on which real voice-cloning
-   provider to use (see `agents/voice/PROVIDER_EVALUATION.md`'s
-   recommendations and tradeoffs), then that provider's adapter
-   implemented and registered (a single small module — see the
-   evaluation's Section 1/"Can a real adapter be implemented now?"),
-   then the owner's actual sample/config and real, owner-obtained
-   credentials supplied via the environment. Only after both a real
-   engine is configured *and* Episode 1's content review reaches human
-   approval should Episode 1 actually be produced in the owner's voice —
-   this task's own explicit instruction is not to regenerate Episode 1's
-   production artifacts yet.
+   **Unchanged by anything in this follow-up** — the owner's voice
+   decision above is a completely separate authorization from content
+   approval, exactly as `PROVIDER_EVALUATION.md`'s "Human authorization
+   boundary" requires.
+2. **Owner voice**: provider selected and activated
+   (`VOICE_DECISION = USE_FOR_PRODUCTION`). Remaining, not yet done:
+   finish the isolated full-pipeline validation (Visual Planner onward)
+   this follow-up started, and — only once Episode 1's own content
+   review independently reaches human approval — produce Episode 1's
+   real, canonical production artifacts in the owner's voice. Nothing in
+   this follow-up regenerated Episode 1's actual canonical production
+   artifacts, approved its content, or authorized publishing.
 
 Beyond those two: (1) a real `ResearchProvider` implementation (Phase
 7G's own deferred follow-up) would give future evidence gaps an

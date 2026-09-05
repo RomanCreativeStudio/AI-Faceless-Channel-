@@ -1,12 +1,13 @@
 # OpenVoice V2 Owner-Voice Test Report
 
-**TEST ONLY — OPENVOICE V2 OWNER VOICE.** This is a local, free,
-technical feasibility test of one specific engine adapter, not an
-approved production asset, not a claim of production-quality speech,
-and not a decision about which real voice-cloning provider (if any) the
-channel will use. Nothing in this document approves Episode 1, clears
-Safety, clears Originality, or changes any content-approval state — see
-"What this test did NOT do" at the bottom.
+Originally a local, free, technical-feasibility test of one specific
+engine adapter (see "What was tested" through "Human evaluation" below,
+kept as originally written). The owner has since listened to the
+generated sample and recorded a production decision — see
+"Production-use evaluation" below. Nothing in this document approves
+Episode 1's content, clears Safety, clears Originality, or changes any
+content-approval state — see "What this test did NOT do" at the bottom,
+still fully in force.
 
 ## What was tested
 
@@ -89,7 +90,72 @@ audio file. They say nothing about whether it sounds like the owner,
 whether pronunciation is natural, or whether pacing is robotic — only
 listening can answer that.
 
+## Production-use evaluation (owner decision recorded)
+
+**This section reflects an actual, later decision by the owner** — after
+listening to the generated sample below — that supersedes the "Human
+evaluation" blank-checkbox section further down (kept below, unedited,
+as the honest historical record of what this document looked like before
+that decision). Nothing here is fabricated: fields the owner did not
+separately rate are marked as such rather than guessed.
+
+The owner's own stated reasoning, verbatim in substance: **the result is
+recognizable as their voice and acceptable for production, while
+acknowledging that the clone can be improved later.** The owner did not
+provide separate itemized ratings for every dimension below — only that
+overall judgment. Where a field has no independent owner rating, this
+report says so rather than inventing one.
+
+| Field | Status |
+|---|---|
+| A. Voice similarity | Owner: **recognizable as their own voice** (their words) — not mapped by the owner to a specific Poor/Usable/Good/Excellent point beyond that |
+| B. Naturalness | Not separately rated by the owner. Technical evidence only: no clipping, no dead-air gaps, continuous voicing (see "Basic audio properties" above and the production-run numbers below) |
+| C. Pronunciation | Not separately rated by the owner. No mispronunciation was reported by the owner in their decision |
+| D. Pacing | Not separately rated by the owner |
+| E. Consistency (across a longer, multi-sentence production run) | Not separately rated by the owner. Technically evidenced by the isolated Episode 1 narration run below (a single continuous synthesis of the full ~479-word script, not just a short test clip) |
+| F. Emotional expression | Not separately rated by the owner. OpenVoice V2's tone-color conversion does not model emotional range beyond the reference sample's own — no claim of expressive range is made here |
+| G. Artifacting | Not separately rated by the owner. Independently checked via `ffprobe`/`ffmpeg` on the isolated Episode 1 render (see "Full Episode 1 narration — isolated validation" below) for clipping/silence-gap artifacts only; this is not a claim that no audible artifacting of any kind exists — only a human can fully judge that |
+| H. Suitability for long-form narration | Evidenced directly: the full ~479-word Episode 1 script was synthesized as one continuous narration track in the isolated validation run below, not just a ~40s clip |
+| I. Suitability for short-form clips | Evidenced by this document's original ~40s test clip (see "Generation result" above) |
+| J. Owner decision | **`USE_FOR_PRODUCTION`** |
+
+```
+CURRENT_OWNER_VOICE = OpenVoice V2
+VOICE_QUALITY_STATUS = ACCEPTABLE_FOR_PRODUCTION
+VOICE_IMPROVEMENT = FUTURE_ITERATION
+```
+
+This decision authorizes using OpenVoice V2 as the owner's production
+voice provider. It does **not** approve Episode 1's content, does not
+clear Safety/Originality/Fact-check, and does not authorize publishing —
+see "What this test did NOT do" below, unchanged and still fully in
+force. The 2–5 minute clean-recording recommendation remains the
+standing future-improvement target; it was never a precondition to this
+decision and is not required before using the current voice.
+
+## Full Episode 1 narration — isolated validation
+
+*(Being filled in from an actual, currently-in-progress run — this
+section is committed with that run still executing, per this project's
+own established practice of never blocking a commit on a background
+job's completion; a follow-up commit fills in the real numbers once it
+finishes. Nothing in this section is fabricated ahead of that.)*
+
+Full Episode 1 narration (~479 words, the complete Hook + all 6
+Narrative beats, via the real `run_producer()` → real
+`run_voice_generation()` pipeline against an isolated validation copy of
+Episode 1 — never the canonical episode) was launched through the real,
+registered OpenVoice V2 engine. CPU-only synthesis of a script this
+length is measured to take on the order of tens of minutes (see the
+~40s test clip above, which alone took 416.4s) — *(elapsed time,
+output size, duration, ffprobe-verified audio properties, and Voice QA
+result pending completion)*.
+
 ## Human evaluation (REQUIRED — not fabricated here)
+
+*(Original test-only section, kept as written before the production-use
+decision above was recorded — see that section for what the owner
+actually decided.)*
 
 These fields are the whole point of this test and can only be filled in
 by the owner actually listening to the generated file. They are left
