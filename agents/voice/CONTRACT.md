@@ -180,6 +180,74 @@ The Voice agent must **never**:
   engine's own code, directly from the process environment, and are
   never captured onto `OwnerVoiceConfig` or any result object.
 
+## Owner-voice adapter contract
+
+The exact interface a real `OwnerVoiceEngine` implementation must
+satisfy — `agents/voice/src/owner_voice.py`'s `OwnerVoiceEngine`
+Protocol, unchanged since it was introduced and not to be replaced with
+a vendor-specific abstraction. This section exists so a future adapter
+can be judged against a written contract, not just the Protocol's own
+docstring.
+
+**A conforming adapter MUST be capable of:**
+
+- Accepting the authorized owner voice configuration
+  (`OwnerVoiceConfig` — `voice_id`, `sample_path`, `model_id`,
+  `language`, `speaking_style`, `stability`, `consistency`,
+  `pronunciation`) via its `synthesize(narration_text, config)` call.
+- Accepting PROVIDER-READY NARRATION exactly as `agents/voice/src/
+  narration.py` produces it — the same text every other `VoiceProvider`
+  receives, with no adapter-specific preprocessing beyond what a real
+  vendor's API strictly requires for transport (e.g. text encoding).
+- Generating real audio and returning it as an `EngineSynthesisResult`
+  (`audio_bytes`, `extension`, `duration_seconds`, `model_label`).
+- Returning deterministic, structural metadata: which provider/engine
+  and model produced the audio, and the owner-authorized voice ID used
+  — all surfaced through `OwnerVoiceProvider.label` and
+  `OwnerVoiceConfig.voice_configuration_string()`, which every adapter
+  gets for free without writing its own metadata formatting.
+- Being identified, in every result, as owner-authorized —
+  `OwnerVoiceProvider.label` always includes
+  `OWNER_AUTHORIZATION_LABEL` (`OWNER_AUTHORIZED_VOICE`); an adapter
+  never needs to (and must not attempt to) add its own separate
+  authorization marker that could contradict or replace it.
+- Returning an accurate output duration in seconds — used unchanged for
+  `templates/VOICE.md`'s `Generated audio > Duration` field and by
+  downstream QA (`qa.py`).
+- Preserving the narration/script-hash relationship — an adapter never
+  sees or touches `Script content hash` at all; that relationship is
+  computed and enforced entirely by `pipeline.py`, above the provider
+  interface, exactly as for every other `VoiceProvider`.
+- Failing explicitly (raising, not returning a degraded result) when
+  its own configuration or capability is unavailable —
+  `is_available()` returning `(False, reason)` for engine-specific
+  problems (missing package, missing local model file, unreachable
+  service), and declaring `required_credential_env_vars` so
+  `check_owner_voice_availability()` can catch a missing credential
+  before ever calling `synthesize()`.
+
+**A conforming adapter MUST NOT:**
+
+- Rewrite, summarize, or silently modify the narration text it is
+  given, in any way beyond what `narration.py`'s existing
+  quote/whitespace normalization already does. If a vendor's API would
+  otherwise alter wording (e.g. its own "smart" text normalization
+  changing a number or a hedge phrase), the adapter must reject that
+  output rather than pass it through.
+- Silently fall back to another voice, another provider, or placeholder
+  audio when its own real synthesis fails or is unavailable — it must
+  raise, and `OwnerVoiceProvider.generate()` already guarantees this is
+  never caught internally (see "Forbidden actions" above).
+- Approve content of any kind — an adapter has no access to, and must
+  never be given access to, `CONTENT_ITEM.md`'s `status` or any
+  Safety/Originality/approval state. Provider *readiness* and content
+  *approval* are two independent human decisions (see
+  `agents/voice/PROVIDER_EVALUATION.md`'s "Human authorization
+  boundary"); a working adapter must never be able to influence the
+  second.
+- Publish anything, anywhere, under any condition — identical to every
+  other `VoiceProvider`'s existing "Forbidden actions" obligation above.
+
 ## Re-running / staleness
 
 If `voice/voice-<n>.md` already exists for a content item: a matching

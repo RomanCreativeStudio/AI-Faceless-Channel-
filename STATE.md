@@ -1603,6 +1603,54 @@ change needed — `owner_voice.py`, `pipeline.py`, `mutate.py`, and
 modified this round). Golden sample and Episode 1 (still
 `WAITING_FOR_HUMAN_SAFETY_REVIEW`) both confirmed untouched.
 
+## Completed (Phase 8 follow-up 6: owner-voice readiness — adapter contract + authorization-boundary tests)
+
+**No new provider, no code behavior change** — the `OwnerVoiceEngine`
+protocol built in follow-up 4 was preserved exactly as-is, per this
+round's own explicit instruction not to redesign it. This round adds
+documentation and tests only.
+
+- `agents/voice/CONTRACT.md` gained an "Owner-voice adapter contract"
+  section: a written MUST/MUST-NOT list any future adapter is judged
+  against (accepting the authorized config and provider-ready
+  narration, generating audio, returning deterministic provider/model/
+  voice-ID metadata and duration, preserving the narration/script-hash
+  relationship, failing explicitly when unavailable — and never
+  rewriting/summarizing narration, never silently falling back, never
+  approving or publishing content).
+- `agents/voice/PROVIDER_EVALUATION.md` gained: an explicit
+  `RECOMMENDED_PRODUCTION_SAMPLE = 2-5 minutes...` constant alongside
+  the existing `INITIAL_SAMPLE_STATUS = TECHNICALLY_USABLE_FOR_TEST`; a
+  "Human authorization boundary" section spelling out the two
+  independent human decisions (provider authorization vs. episode
+  editorial approval) and why neither can satisfy the other; and a
+  machine-readable decision block (`OWNER_DECISION_REQUIRED`,
+  `SELECTED_PROVIDER = UNSELECTED`, `SAMPLE_STATUS =
+  TECHNICALLY_USABLE_FOR_TEST`, `PRODUCTION_SAMPLE_RECOMMENDATION =
+  2-5 MINUTES`, `EXTERNAL_UPLOAD_AUTHORIZED = FALSE`) — descriptive only,
+  never read by any code, never auto-updated.
+- `agents/voice/tests/test_owner_voice_authorization_boundary.py`
+  (12 new tests, all using a clearly-labeled fake test engine — no real
+  provider registered or contacted): an unselected/unregistered engine
+  name fails safely and by name; `resolve_voice_provider("owner-voice")`
+  never hands back `LocalFallbackVoiceProvider`/`LocalTestVoiceProvider`
+  even when unconfigured; the module has no network-capable imports at
+  all; a private sample's filename and a fake credential's value never
+  appear in any file `run_voice_generation(apply=True)` writes to disk,
+  nor in the returned result's own string fields; a fully-available
+  owner-voice provider still cannot bypass the pre-existing content-
+  approval gate on an unapproved item; and registering/configuring a
+  provider never touches `CONTENT_ITEM.md` at all.
+
+**Full suite: 579/579 passing** (567 baseline + 12 new; zero
+regressions). No external voice service was contacted at any point —
+confirmed no network-capable code path exists in `owner_voice.py` and
+no engine is registered. Golden sample and Episode 1 (still
+`WAITING_FOR_HUMAN_SAFETY_REVIEW`, re-verified live via
+`continue_after_human_safety_review()`) both confirmed untouched. No
+private sample path, filename, or content appears anywhere in this
+round's diff.
+
 ## Next task
 
 No further phase was specified as the "exact next task" beyond this

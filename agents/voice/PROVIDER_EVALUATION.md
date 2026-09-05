@@ -65,12 +65,19 @@ Nothing else changes: not `pipeline.py`, not `mutate.py`, not
 `templates/VOICE.md`, not `provider_selection.py`'s three existing
 names (owner-voice already resolves to whatever engine is registered).
 
+See `agents/voice/CONTRACT.md`'s "Owner-voice adapter contract" section
+for the full, written MUST/MUST-NOT list a real adapter is judged
+against (narration integrity, no silent fallback, no approval/publish
+capability, deterministic metadata) — not repeated in full here to
+avoid the two documents drifting out of sync.
+
 ---
 
 ## 2. Sample status
 
 ```
 INITIAL_SAMPLE_STATUS = TECHNICALLY_USABLE_FOR_TEST
+RECOMMENDED_PRODUCTION_SAMPLE = 2-5 minutes of clean, uninterrupted owner speech
 ```
 
 The ~18-second sample already provided (mono AAC, 44.1kHz, clean —
@@ -83,7 +90,10 @@ cloud vendors recommend stopping there for a voice a channel will use
 repeatedly). A longer, 2–5 minute clean sample is recommended before
 committing to any provider for real production use, and is close to
 what several vendors themselves recommend as a *minimum*, not just an
-upgrade.
+upgrade. Neither the 18-second sample nor a longer one has been, or
+should be, uploaded anywhere — both remain private, local material
+until the owner explicitly authorizes a specific provider to receive
+one of them (see Section 9).
 
 ---
 
@@ -319,3 +329,59 @@ exactly the `OwnerVoiceEngine` protocol recapped in Section 1 and
 registered via `register_owner_voice_engine`) is the only code change
 needed — `owner_voice.py` itself, `pipeline.py`, `mutate.py`, and
 `templates/VOICE.md` all stay exactly as they are.
+
+---
+
+## 9. Human authorization boundary
+
+There are two separate human decisions in play, and neither may ever
+silently satisfy the other:
+
+**A. Provider authorization** — does the owner permit a *specific*
+external or local voice engine to process their voice sample? Governed
+entirely by `agents/voice/src/owner_voice.py`: no engine is registered
+by default, `OWNER_VOICE_ENGINE`/`OWNER_VOICE_SAMPLE_PATH` must be set
+explicitly, and `OwnerVoiceProvider` never contacts anything unless a
+real engine has been registered and its own availability check passes.
+This decision is scoped to *this specific content item's narration
+step* — it is not, and must never become, an approval of any episode's
+content.
+
+**B. Episode editorial approval** — the existing, independent
+`FACT_CHECK → SAFETY_REVIEW (→ human signoff) → ORIGINALITY_REVIEW →
+human content approval` chain (see `HUMAN_REVIEW.md` and
+`agents/orchestrator/src/human_safety_continuation.py` for Episode 1's
+own current state). Nothing in `agents/voice/` reads or writes
+`CONTENT_ITEM.md`'s `status`, `Owner approval state`, `Safety state`,
+or `Originality state` — structurally guaranteed by `OwnerVoiceConfig`/
+`OwnerVoiceProvider` taking no content-item path at all, and verified
+by `agents/voice/tests/test_owner_voice_authorization_boundary.py`.
+
+Concretely: a fully configured, fully available `OwnerVoiceProvider`
+run against an unapproved content item is still blocked by
+`agents/voice/CONTRACT.md`'s existing approval-gate precondition
+(`CONTENT_ITEM.md status == APPROVED`) — provider readiness cannot
+bypass it. And registering a provider, or even successfully generating
+owner-voice audio, never sets `status = APPROVED`, never records a
+Safety signoff, and never touches Originality — those remain entirely
+separate, human-only actions. Episode 1 specifically remains
+`WAITING_FOR_HUMAN_SAFETY_REVIEW` throughout everything in this
+document — nothing here reads or affects that state.
+
+---
+
+## 10. Machine-readable decision state
+
+```
+OWNER_DECISION_REQUIRED
+SELECTED_PROVIDER = UNSELECTED
+SAMPLE_STATUS = TECHNICALLY_USABLE_FOR_TEST
+PRODUCTION_SAMPLE_RECOMMENDATION = 2-5 MINUTES
+EXTERNAL_UPLOAD_AUTHORIZED = FALSE
+```
+
+This block is descriptive documentation, not a config file any code
+reads — no automation may flip `EXTERNAL_UPLOAD_AUTHORIZED` or populate
+`SELECTED_PROVIDER` on its own. Update it by hand only once the owner
+has actually made and communicated a decision; until then, it stays
+exactly as shown here.
