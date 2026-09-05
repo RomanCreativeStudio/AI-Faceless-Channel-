@@ -282,9 +282,14 @@ python3 -m unittest discover -s agents/voice/tests -t .
   `templates/VOICE.md`'s "typically one per production" design; a
   multi-track production isn't modeled yet.
 - **QA is structural only** — see "QA" above.
-- **`OwnerVoiceProvider` has no engine registered yet** — the adapter
-  boundary, configuration, capability detection, and tests all exist
-  (see "Owner voice" above), but no specific voice-cloning vendor/local
-  model has been selected or configured in this environment. Real
-  owner-voice narration is a separate, later validation step once one
-  is.
+- **`OwnerVoiceProvider` has no engine registered by default** — a
+  real, local, free engine now exists
+  (`agents/voice/src/engines/openvoice_v2_engine.py`, OpenVoice V2), but
+  it registers itself only when explicitly imported into a process that
+  has its own isolated environment set up (see that module's own
+  `README.md`) — nothing in this package imports it automatically, so
+  `agents/voice/`'s registry stays empty for every normal test/CI run.
+  See `agents/voice/OPENVOICE_V2_TEST_REPORT.md` for the actual,
+  honest technical-feasibility test result — a technically successful
+  local synthesis is not itself a claim of production-quality speech;
+  only a human listening to the output can determine that.

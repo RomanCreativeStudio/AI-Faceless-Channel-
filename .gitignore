@@ -8,3 +8,18 @@ __pycache__/
 /owner_voice_samples/
 /.private/
 *.owner-voice-sample.*
+
+# OpenVoice V2 local experiment (agents/voice/src/engines/openvoice_v2_engine.py):
+# isolated venv, downloaded model checkpoints, and generated test audio —
+# none of this belongs in the repository. The venv keeps OpenVoice's heavy
+# ML dependencies (torch, etc.) out of the project's own environment.
+/.voice-experiments/
+*.pt
+*.pth
+*.ckpt
+*.onnx
+# OpenVoice's own se_extractor defaults to writing derived audio
+# segments here (relative to cwd) unless target_dir is overridden —
+# our adapter always overrides it, but this stays as defense in depth
+# against a manual/ad-hoc run from the repo root.
+/processed/

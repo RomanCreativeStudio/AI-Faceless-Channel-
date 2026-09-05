@@ -1651,6 +1651,82 @@ no engine is registered. Golden sample and Episode 1 (still
 private sample path, filename, or content appears anywhere in this
 round's diff.
 
+## Completed (Phase 8 follow-up 7: OpenVoice V2 — first real owner-voice engine)
+
+**Implemented `agents/voice/src/engines/openvoice_v2_engine.py`** — the
+first real `OwnerVoiceEngine`: OpenVoice V2 (MyShell, MIT license),
+fully local, no cloud API, no account, no credentials
+(`required_credential_env_vars = []`). Conforms exactly to the existing,
+unmodified `OwnerVoiceEngine` protocol; never registered automatically
+(registers only when explicitly imported), so `agents/voice/`'s provider
+registry stays empty for every normal test/CI run — the same guarantee
+every prior follow-up already established.
+
+**A real, isolated local environment was actually built and exercised**
+(`.voice-experiments/`, fully gitignored, never touches this
+repository's own `requirements.txt`): torch/torchaudio, the `openvoice`
+package, MeloTTS, and OpenVoice V2's checkpoints. Two genuine
+environment blockers were hit and resolved, both documented in
+`agents/voice/src/engines/README.md` for reproducibility:
+
+1. The officially-documented checkpoint host
+   (`myshell-public-repo-host` on S3) returned `NoSuchBucket` — retired
+   since the docs were written. Used the maintained Hugging Face mirror
+   (`myshell-ai/OpenVoiceV2`) instead — same files, same license.
+2. `faster-whisper==0.9.0`'s pinned `av==10.*` dependency has no
+   prebuilt wheel for Python 3.11 and fails to compile (missing FFmpeg
+   *development* headers — only the runtime `.so` files are present in
+   this environment). An unpinned, current `faster-whisper` resolves a
+   newer `av` with a prebuilt wheel instead, with no behavior difference
+   relevant to this use case.
+
+**A genuine privacy bug was found and fixed during real testing**:
+OpenVoice's own `se_extractor.get_se()` defaults to writing derived
+audio segments extracted from *the owner's actual sample* into a
+`processed/` directory relative to the current working directory —
+which landed inside this repository's own working tree during a real
+test run (never committed; caught and deleted immediately). Fixed by
+pinning `target_dir` to the adapter's own ephemeral
+`tempfile.TemporaryDirectory()` for every call, so no derived sample
+data can ever land anywhere persistent, let alone inside the repo.
+`.gitignore` also gained `/processed/` as defense in depth.
+
+**20 new tests** (`agents/voice/tests/test_openvoice_v2_engine.py`):
+language/speaker-mapping logic, the engine's real identity/protocol
+conformance, its genuine `is_available()`/`synthesize()` failure
+behavior in this test environment (which does not have the heavy ML
+deps installed — an honest test of what happens on any machine that
+hasn't set up the isolated environment, not a mock), registration,
+no-network-imports, the content-approval boundary (a fully-available
+OpenVoice engine still cannot bypass the pre-existing `APPROVED` gate),
+and — via a separate, clearly-labeled fake test double, never claimed
+to be OpenVoice — narration/script-hash/metadata pipeline guarantees.
+**Full suite: 599/599 passing** (579 baseline + 20 new; zero
+regressions).
+
+**A real local synthesis test completed successfully** against the
+owner's existing ~18-second sample (`INITIAL_SAMPLE_STATUS =
+TECHNICALLY_USABLE_FOR_TEST`, unchanged recommendation: 2–5 minutes for
+real production use) with a representative ~98-word test narration —
+full write-up in `agents/voice/OPENVOICE_V2_TEST_REPORT.md`. Genuine,
+non-placeholder audio was produced: 416.4s synthesis time (CPU-only —
+MeloTTS + BERT prosody + tone-color conversion, no GPU in this
+environment), 1,527,340 bytes, 34.63s duration, WAV/PCM 16-bit mono
+22,050Hz (independently verified via `ffprobe`/`ffmpeg` — not
+self-reported), peak volume −7.1dB (no clipping), no silence gaps
+≥0.5s. Replayed through the real `run_voice_generation()` pipeline
+against an isolated throwaway test item (never Episode 1): **Voice QA
+= `PASS`**, `generation_status = GENERATED`, correct
+`OWNER_AUTHORIZED_VOICE` provider metadata, no trace of the private
+sample's path in any written record. The 18-second sample was
+sufficient to produce a complete, structurally valid synthesis — this
+is **not** evidence of production-quality fidelity; only human
+listening can determine that. The report's "Human evaluation" fields
+(voice similarity, naturalness, pronunciation, narration suitability,
+overall decision) are deliberately left blank for the owner — nothing
+here fabricates that judgment. Nothing about this experiment touches
+Episode 1, Safety, Originality, or any approval state.
+
 ## Next task
 
 No further phase was specified as the "exact next task" beyond this
