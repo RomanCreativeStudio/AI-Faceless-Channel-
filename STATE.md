@@ -1249,18 +1249,106 @@ system:
    simulate on its own authority. The episode is **not** published and
    is **not** human-approved; nothing in this session changed that.
 
+## Completed (Phase 8 follow-up 2: Safety escalation inspection + human-review package)
+
+**Inspected the `SENSITIVE_CONTENT` escalation directly against the real
+script rather than assuming the keyword itself means the episode is
+unsafe.** `agents/safety/src/signals.py`'s `check_sensitive_content` is a
+plain keyword match (`plague`, among a small curated tragedy/mass-
+casualty list) against `SCRIPT.md` + `CONTENT_ITEM.md` text — it cannot
+and does not evaluate tone or framing, by design. The script was read in
+full and searched for graphic, exploitative, or sensational language
+(gore, suffering, exaggerated-casualty framing): none found. Every
+mortality figure is a sourced, hedged statistic; the Conclusion
+explicitly rejects a "modern medicine saves the day" framing. **No
+editorial revision was made** — rewriting to avoid the word "plague"
+(the historical disease this episode is about) would not change the
+episode's substance, only defeat the keyword detector. The
+`SENSITIVE_CONTENT` signal, the `agents/safety/` keyword list, and the
+orchestrator's stop-at-first-blocker behavior were none of them touched,
+weakened, or bypassed.
+
+**Re-ran content review via the real orchestrator** (`run_automated_review`,
+dry-run first, then `apply=True`): `FACT_CHECK` correctly reused its
+existing `PASS` (attempt #2 — hash unchanged, since Researcher's
+`Reviewed content hash` never includes `CONTENT_ITEM.md`).
+`SAFETY_REVIEW` genuinely re-ran as a fresh attempt
+(`reviews/safety_reviewer-2.md`) because adding `HUMAN_REVIEW.md`'s
+reference to `CONTENT_ITEM.md`'s own Linked records/Notes sections
+changed the *Safety* role's `Reviewed content hash` specifically (its own
+`compute_reviewed_content_hash` hashes all of `CONTENT_ITEM.md`, unlike
+Researcher's) — correctly detected as stale and re-evaluated rather than
+assumed still valid. Attempt #2 reached the identical verdict and reason
+as attempt #1 (`REVISION_REQUIRED` — `SENSITIVE_CONTENT` only; every
+other signal `LOW_RISK`/`NOT_APPLICABLE`, including `AI_DISCLOSURE`).
+`ORIGINALITY_REVIEW` still not reached — the orchestrator still correctly
+stops at Safety. Overall content review remains
+`HUMAN_ESCALATION`/`BLOCKED_AT_SAFETY_REVIEW` — genuinely, not by
+omission.
+
+**Re-attempted real Wikimedia retrieval for the two previously-failed
+assets** (mortality timeline scene; absence-of-germ-theory scene), using
+several honest, still-topically-faithful queries — not to force a match,
+but to check whether a legitimate real asset now exists. Findings: for
+the mortality-timeline scene, no safe/accurate result exists (candidates
+were a real-but-unrelated 1930s political cartoon and an unrelated
+Renoir painting); `SCRIPT.md`'s own Visual requirements already call for
+a "map graphic" there, which is structurally a diagram, not an archival
+photograph (none exists from 1347) — so `GENERATED_RECONSTRUCTION` is
+arguably the correct asset type for this scene, not really a retrieval
+gap. For the absence-of-germ-theory scene, a real, safe, on-topic,
+public-domain candidate was found (a portrait of Louis Pasteur, whom the
+script names directly) — recorded as a finding for a future production
+run; not written into any file, since the canonical episode has no
+`assets/` directory yet (Producer has never run against it). No asset
+anywhere in this repository is, or has been, labeled `RETRIEVED` without
+real, verifiable provenance.
+
+**Created `content/what-if/wi-20260904-black-death-modern-medicine-ep1/
+HUMAN_REVIEW.md`** — a plain-language human-review package (not part of
+the automated review chain; never read by any agent) covering: the
+episode's editorial fact/assumption/inference/speculation breakdown, the
+exact Safety trigger and why no rewrite was made, visual treatment per
+scene, AI disclosure status, production/QA results, the Wikimedia
+findings above, and the two sequential human decisions still required
+(Safety tone/framing sign-off, then — only afterward — `status =
+APPROVED`). Linked from `CONTENT_ITEM.md`'s Linked records and logged in
+its Notes/history log.
+
+**Full test suite: 501/501 passing** — unchanged (no source-code changes
+this round, only content/documentation and a fresh Safety review
+attempt).
+
+**Golden sample confirmed untouched.**
+
+### Exact next human action (unchanged in substance, now documented for the owner directly in `HUMAN_REVIEW.md`)
+
+1. A human reviews this episode's tone/framing of real historical
+   mass-casualty content (`HUMAN_REVIEW.md` Section 2) and decides
+   whether `SAFETY_REVIEW` may be recorded as cleared — this system
+   cannot make this decision.
+2. Only after content review reaches a genuine `PASS` (Fact Check +
+   Safety + Originality — Originality has not yet run), the human owner
+   may consider `CONTENT_ITEM.md`'s `status = APPROVED`. Not done, and
+   not simulated, this round either.
+
+The episode is **not** published and **not** approved.
+
 ## Next task
 
 No further phase was specified as the "exact next task" beyond this
-report. With `claims/c11.md` closed, the one remaining concrete step
-before Episode 1 can move toward production is the human sensitive-
-content review described above — this system has done everything it can
-do on its own authority. Beyond that: (1) a real `ResearchProvider`
-implementation (Phase 7G's own deferred follow-up) would give future
-evidence gaps an automated closure path; (2) per this phase's own
-explicit instruction, observe what a real, human-reviewed Episode 1
-actually needs before building the Learning Engine, analytics, or any
-further automation — none of that is started, and none should be until
-there is real production experience to learn from. Publishing remains
-permanently human-gated per `CONSTITUTION.md` rule 2, regardless of
-anything built so far.
+report. Episode 1 is now at the cleanest state this system can reach on
+its own authority: `claims/c11.md` closed, `FACT_CHECK` genuinely
+`PASS`, `SAFETY_REVIEW` genuinely and correctly human-gated (not a
+defect), a real production pipeline validated end to end, and a
+plain-language human-review package (`HUMAN_REVIEW.md`) prepared. The one
+remaining concrete step is the human sensitive-content review described
+above. Beyond that: (1) a real `ResearchProvider` implementation
+(Phase 7G's own deferred follow-up) would give future evidence gaps an
+automated closure path; (2) per this phase's own explicit instruction,
+observe what a real, human-reviewed Episode 1 actually needs before
+building the Learning Engine, analytics, or any further automation —
+none of that is started, and none should be until there is real
+production experience to learn from. Publishing remains permanently
+human-gated per `CONSTITUTION.md` rule 2, regardless of anything built so
+far.

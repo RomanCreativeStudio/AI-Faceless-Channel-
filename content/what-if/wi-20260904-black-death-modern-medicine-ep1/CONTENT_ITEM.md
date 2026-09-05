@@ -50,8 +50,12 @@ Current status: `SCRIPT`
 - Claims: `claims/c1.md` – `claims/c9.md`, `claims/c10.md`, `claims/c11.md`,
   `claims/c12.md` (`c5` is superseded by `c12` — see `c5.md`)
 - Script: `SCRIPT.md`
-- Reviews: none yet (status has not reached `FACT_CHECK`)
-- Video QA: none yet (no production)
+- Reviews: `reviews/fact_checker-1.md`, `reviews/fact_checker-2.md`,
+  `reviews/safety_reviewer-1.md`; revisions: `revisions/revision-1.md`
+- Human review package: `HUMAN_REVIEW.md` (plain-language summary for
+  the content owner — not part of the automated review chain)
+- Video QA: none yet (no production against the canonical episode;
+  see `HUMAN_REVIEW.md` for isolated-copy validation results)
 
 ## What If? requirement
 
@@ -81,3 +85,13 @@ the modeled uncertainty.
 - 2026-09-05 — [researcher agent] FACT_CHECK attempt #1 -> REVISION_REQUIRED (see reviews/fact_checker-1.md)
 - 2026-09-05 — [researcher agent] FACT_CHECK attempt #2 -> PASS (see reviews/fact_checker-2.md)
 - 2026-09-05 — [safety agent] SAFETY_REVIEW attempt #1 -> REVISION_REQUIRED (see reviews/safety_reviewer-1.md)
+- 2026-09-05 — Inspected the SENSITIVE_CONTENT escalation (keyword
+  `'plague'`) against the actual script text: no graphic, exploitative,
+  or sensational language found; all mortality figures are sourced,
+  hedged statistics. No editorial revision was made, since rewriting to
+  avoid the keyword would not change the substance of a historical piece
+  about the Black Death. Recorded as an intentional human-review gate,
+  not a defect — see `HUMAN_REVIEW.md` for the full human-readable
+  package (editorial summary, exact Safety trigger, visual treatment,
+  production status, and the two remaining human decisions).
+- 2026-09-05 — [safety agent] SAFETY_REVIEW attempt #2 -> REVISION_REQUIRED (see reviews/safety_reviewer-2.md)
