@@ -225,11 +225,105 @@ project's established practice of never blocking a commit on a
 background job's completion; nothing here was fabricated ahead of the
 real result.)*
 
-**Fourth attempt (subprocess-isolated chunks) result:**
+**Fourth attempt (subprocess-isolated chunks): SUCCEEDED — real,
+complete Episode 1 narration, no OOM.**
 
-*(elapsed time, chunk count, output size, duration, ffprobe-verified
-audio properties, and Voice QA result pending completion of this
-in-progress run)*
+| Field | Value |
+|---|---|
+| Elapsed synthesis time | 415.9s (~6m56s), CPU-only |
+| Chunks | 6 (bounded to ~100 words each, subprocess-isolated) |
+| Output size | 7,122,988 bytes |
+| Reported/measured duration | 162s (`ffprobe`: 161.518005s) |
+| Provider label | `owner-voice:openvoice-v2 (OWNER_AUTHORIZED_VOICE, voice_id=owner-production-ep1)` |
+| `is_placeholder` | `False` |
+| `generation_status` | `GENERATED` |
+| `qa_status` (via the real `run_voice_generation()` pipeline) | `PASS`, zero QA reasons |
+| Narration integrity | Provider-ready narration handed to the engine measured at 2,930 characters — matches the independently-computed provider-ready narration length exactly; script-hash relationship correct throughout |
+| Peak memory | No OOM (confirmed via `dmesg` — no new `oom-kill` entries since the third, pre-fix attempt) |
+
+**Basic audio properties** (independently verified via `ffprobe`/`ffmpeg`, not self-reported):
+
+| Property | Value |
+|---|---|
+| Format | WAV (PCM, `pcm_s16le`) |
+| Sample rate | 22,050 Hz |
+| Channels | 1 (mono) |
+| Duration | 161.52s |
+| Mean volume | −32.1 dB |
+| Peak volume | −4.4 dB (no clipping) |
+| Silence gaps ≥0.5s below −35dB | 5, each 0.55–0.66s — consistent with natural pauses between sentences across a ~2.7-minute continuous narration, not dead air or dropouts |
+
+`PRODUCTION.md`'s `Production status` correctly advanced from
+`PRODUCTION_PLANNING` to `VISUAL_PLANNING` only after this real QA
+`PASS` — matching every other provider's existing handoff behavior
+exactly, with no owner-voice-specific special case.
+
+## Isolated production pipeline (Visual Planner → Production QA)
+
+Run for real, directly (never through `agents/full_pipeline/`'s
+`run_full_pipeline()`, which re-runs the full `CONTENT_REVIEW` chain —
+including the real, still-open Safety escalation on Episode 1 — from
+scratch and would have stopped there; this uses the same direct-stage-
+call pattern Phase 8 itself established for validating production
+mechanics on an isolated, `APPROVED`-in-that-copy-only throwaway item)
+against the same isolated Episode 1 copy, immediately after the
+narration above:
+
+| Stage | Provider | Result |
+|---|---|---|
+| Visual Planner | (no provider — planning only) | 7 scene visual plans; 2 classified `RETRIEVED` (scenes 2–3, referencing `FACT` claims c1/c2), 5 `GENERATED_RECONSTRUCTION` |
+| Assets | `GeneratedAssetProviderReal` + `WikimediaCommonsRetrievalProvider` (both real, no mocks) | 5 genuine local illustrations rendered (Pillow, offline). The 2 `RETRIEVED`-strategy scenes genuinely queried the live Wikimedia Commons API and got an honest **"no usable (JPEG/PNG, downloadable) Wikimedia Commons result found"** for both queries — not a rate limit this time, a real no-match. Recorded exactly as returned; neither was ever marked `RETRIEVED`. |
+| Assembler | `FFmpegVideoRenderer` (real ffmpeg) | `ASSEMBLED`, `playable=YES` — H.264/AAC MP4, 1920×1080, 22,050Hz mono audio, 161.52s, 3,803,778 bytes |
+| Captions | (structural, no provider) | `GENERATED` — 7 scenes captioned, every chunk verified a verbatim substring of the narration |
+| Thumbnail | `render_image=True` (real Pillow render) | `GENERATED` — real 35,272-byte PNG |
+| Production QA | (real, structural) | **`REVISION_REQUIRED`** — see below |
+
+**Production QA — exact failing reasons (2 of ~45 checks):**
+
+- `scene-02.md: retrieved asset has real retrieval evidence` — FAILED
+- `scene-03.md: retrieved asset has real retrieval evidence` — FAILED
+
+Both for the documented reason: *"no real retrieval integration exists
+this phase"* (`agents/production_qa/CONTRACT.md`'s own "Known
+limitation: RETRIEVED strategy") — the same, pre-existing limitation
+Phase 8 already documented, not a new regression from this work. Every
+other check passed: content approval/hash, voice hash/QA, all 5
+`GENERATED` assets' provenance and classification, timeline
+consistency (no gaps/overlaps, declared duration matches computed),
+captions timing/mapping, thumbnail framing, and output
+hash/playability.
+
+**Why 2 assets show a substitute image at all**: to get a complete,
+watchable render for manual inspection (mirroring Phase 8's own
+precedent exactly), a **VALIDATION-SUBSTITUTE-ONLY** illustration was
+manually attached to `assets/asset-02.md`/`asset-03.md`'s `Technical >
+File reference` field, clearly labeled in the file itself
+(`asset-0N.VALIDATION_SUBSTITUTE.png`, with an explicit paragraph
+stating it is not a genuine retrieval). Their `Generated vs. retrieved`
+field was **left as `RETRIEVED`** (never changed to `GENERATED`) and
+`Generation/retrieval status` was **left `NOT_STARTED`** (never marked
+`RETRIEVED`) — which is exactly why Production QA correctly still
+failed those two checks rather than being fooled by the substitute
+image's mere presence. This proves QA does not rubber-stamp a
+substitution it wasn't told is real.
+
+**A genuine, honest finding (not fixed — out of this task's scope):**
+the scene timeline's planned total duration (191s, from
+`agents/producer/`'s own word-count-based estimate at planning time)
+does not match the real OpenVoice V2 audio's actual duration (161.5s) —
+the owner's real speaking pace differs from the estimate the planner
+used. The final render's actual length follows the real audio (161.5s),
+not the originally-planned 191s. This is a genuine pacing/duration-
+estimation consideration for real voice engines that no agent currently
+reconciles automatically — noted honestly here rather than hidden, and
+left for future work rather than addressed in this task (which is about
+activating OpenVoice V2, not rebuilding scene-duration estimation).
+
+Nothing in this section changed `CONTENT_ITEM.md`, cleared Safety/
+Originality, or published anything — see "What this test did NOT do"
+below, unchanged and still fully in force. The canonical Episode 1
+directory was confirmed untouched (`git status --porcelain`) before and
+after every step in this section.
 
 ## Human evaluation (REQUIRED — not fabricated here)
 
