@@ -1115,19 +1115,152 @@ publishing authority) is untouched.
    this phase declined to take. `flite`'s complete lack of any
    credential requirement was the deciding factor in choosing it.
 
+## Completed (Phase 8 follow-up: Episode 1 evidence closure + validation)
+
+**`claims/c11.md`'s evidence gap is closed — honestly, with a real
+source, using the existing immutable-claim/supersession mechanism.**
+Five real, live sources were checked; this time Wikipedia's "Antibiotic"
+article's History section directly corroborated the exact claim
+("Antibiotics were not developed until the 20th century") with specific,
+uncontested dates (Fleming's 1928 penicillin discovery, Domagk's 1932/33
+Prontosil) and its own "revolutionized medicine in the 20th century"
+framing. Recorded as a new, permanent research entry,
+`research/04-wikipedia-antibiotic-history.md`. `agents/researcher/src/
+revision.py`'s `run_fact_check_with_autonomous_revision` — already built
+in Phase 7F, never exercised end-to-end on a real gap until now — was run
+live against the canonical episode (fact-check/revision are independent
+of, and prior to, the human-approval gate) and correctly diagnosed this
+as `RevisionCase.FIXABLE` (an existing research entry already
+reciprocally cited `c11` in its own `Related claims`, just not yet cited
+back). It created a successor claim, `claims/c11_rev1.md`
+(`Fact-check status = VERIFIED`, exact original claim wording preserved
+unchanged — the evidence supported the claim as originally written, so
+no rewording was needed or made), and left `claims/c11.md` itself
+byte-identical apart from one appended, trailing "Superseded" note — its
+`Exact claim`/`Classification`/original table are untouched, per
+`templates/CLAIM.md`'s Atomicity rule. `SCRIPT.md`'s own "Verified
+claims" table still cites `c11` by name (the revision engine never
+rewrites `SCRIPT.md`), which is expected and correct — `c11_rev1` is
+resolved by content hash lookup, not by the script's own claim ID text.
+
+**A genuine, previously-latent bug was found and fixed along the way**:
+`agents/researcher/src/loader.py`'s `normalize_claim_ref` and
+`normalize_research_ref` both used `token.rsplit("/", 1)[-1]` to extract
+a claim/research basename from a path-like reference — which silently
+corrupted the literal placeholder `"N/A"` into `"A"` when backtick-
+wrapped (e.g. a real successor claim's own `Derived from | \`N/A\` |`
+table cell). Never triggered before because nothing had exercised a real
+autonomous-revision successor claim end-to-end until this session. Fixed
+with an explicit guard in both functions (`if token.upper() == "N/A":
+return token`, before any path-splitting); regression test added,
+`agents/researcher/tests/test_loader_ref_normalization.py` (5 cases).
+Confirmed `claims/c11_rev1.md`'s `Derived from` field now correctly reads
+`N/A`.
+
+**Content review re-run for real, via `agents/orchestrator/`'s
+`run_automated_review` (FACT_CHECK → SAFETY_REVIEW → ORIGINALITY_REVIEW,
+stopping at the first blocking stage — never bypassed, nothing manually
+marked `PASS`):**
+
+| Stage | Verdict | Notes |
+|---|---|---|
+| `FACT_CHECK` | `PASS` (attempt #2; attempt #1 was `REVISION_REQUIRED` before `c11_rev1` existed) | All 11 claims `VERIFIED`/`NOT_APPLICABLE`, no unresolved contradictions; autonomous revision correctly evaluated successor `c11_rev1` in place of superseded `c11`. |
+| `SAFETY_REVIEW` | `REVISION_REQUIRED` (attempt #1) | Every signal `LOW_RISK`/`NOT_APPLICABLE` except `SENSITIVE_CONTENT: REVIEW_REQUIRED` — the keyword `'plague'` (real mass-casualty tragedy content) triggers this system's deliberate, permanent human-escalation gate. This is working as designed, not a defect, and was correctly left unresolved rather than auto-cleared. (`AI_DISCLOSURE` is now `LOW_RISK` — a real "AI disclosure plan" section was added to `SCRIPT.md`, giving `check_ai_disclosure()`'s substring search a genuine match; this was a real fix, not a keyword hack, since the disclosure plan itself describes real on-screen/description text.) |
+| `ORIGINALITY_REVIEW` | `NOT_STARTED` | Never reached — the orchestrator correctly stops at the first blocking stage (`SAFETY_REVIEW`). |
+
+**Content review has not reached full `PASS`.** The remaining blocker is
+`SENSITIVE_CONTENT`'s human-judgment escalation — by design, this system
+cannot and must not resolve it automatically. This is a separate gate
+from, and prior to, human approval of `status = APPROVED` itself.
+
+**Human approval was never touched.** Canonical
+`CONTENT_ITEM.md`'s `Current status:` remains `SCRIPT`; `Owner approval
+state` remains `NOT_STARTED`. Nothing in this session set or simulated
+`APPROVED` on the canonical episode.
+
+**Real production pipeline validated end to end**, again on a fresh,
+isolated, throwaway copy (this session's own scratch directory, never
+committed) with `APPROVED` set only in that copy — Producer → Voice
+(`FliteVoiceProvider`) → Visual Planner → Assets → Assembler
+(`FFmpegVideoRenderer`) → Captions → a second, manual Assembler render
+pass (captions burned in) → Thumbnail (`render_image=True`) →
+`agents/production_qa/`:
+
+- Assets: real Wikimedia retrieval was attempted for both `RETRIEVED`-
+  strategy scenes and genuinely failed — this time confirmed as a
+  query-specificity issue rather than primarily rate-limiting (a short,
+  generic query succeeded but surfaced a real, topically-unrelated,
+  sensitive image; the actual narration-derived queries returned no
+  usable result). Deliberately did not loosen the query just to force a
+  match — an honest `RETRIEVAL_FAILED` was judged safer than a
+  "successful" but mismatched/sensitive retrieval. Real Pillow
+  illustrations were substituted for validation only, with
+  `Generation/retrieval status` left honestly `NOT_STARTED` (never
+  marked `RETRIEVED`) — no fabricated provenance.
+- Both known Phase 8 production limitations were checked against this
+  real run and confirmed **not** to block a watchable result: the
+  Assembler-before-Captions ordering still requires the documented
+  two-pass workaround (render once without captions, run Captions, then
+  re-invoke the same real renderer directly to burn captions into a
+  fresh `output/video-01.mp4`) — done here, producing a real,
+  `ffprobe`-verified `Playable = YES` H.264/AAC MP4 with captions
+  correctly burned in; hard-cut-only transitions were a non-issue since
+  Episode 1 only ever uses cuts. Neither was redesigned, per this
+  phase's explicit instruction not to.
+- `agents/production_qa/` verdict: `REVISION_REQUIRED` — exactly the two
+  expected, honest flags (`scene-02.md`/`scene-03.md`: "retrieved asset
+  has real retrieval evidence" fails because `Generation/retrieval
+  status` is `NOT_STARTED`, not `RETRIEVED`) and nothing else. Every
+  other check passed (Content, Voice, Timeline, Captions, Thumbnail,
+  Output/playability). This is the QA layer correctly refusing to
+  rubber-stamp a substitution it wasn't told is a real retrieval — proof
+  the check works, not a pipeline defect.
+- Thumbnail: a real 1280×720 PNG rendered successfully from the existing
+  spec.
+
+**Full test suite: 501/501 passing** (496 baseline + 5 new — the
+`test_loader_ref_normalization.py` regression tests for the bug above).
+Zero regressions, zero new skips.
+
+**Golden sample confirmed untouched**:
+`git status --porcelain -- content/what-if/wi-20260902-black-death-modern-medicine/`
+returns nothing.
+
+**No new production limitations were found.** All limitations already
+listed under Phase 8's "Known limitations" above still apply as
+documented (Wikimedia rate-limiting/query-specificity, Assembler/Captions
+ordering, hard-cut-only transitions, the deliberately abstract
+illustration renderer, opt-in thumbnail rendering).
+
+### Exact next human action
+
+Two separate, sequential decisions remain — neither can be made by this
+system:
+
+1. **A human must review the tone/framing of this episode's real
+   mass-casualty subject matter** (the Black Death, flagged via the
+   `'plague'` keyword) before `SAFETY_REVIEW` can genuinely clear. This
+   is the one concrete blocker on `agents/orchestrator/`'s automated
+   review pipeline right now. `ORIGINALITY_REVIEW` has not yet run and
+   its outcome is unknown until Safety clears.
+2. Only after content review reaches a genuine `PASS`, the human owner
+   may consider setting the canonical `CONTENT_ITEM.md`'s
+   `status = APPROVED` — a decision this system will never make or
+   simulate on its own authority. The episode is **not** published and
+   is **not** human-approved; nothing in this session changed that.
+
 ## Next task
 
 No further phase was specified as the "exact next task" beyond this
-report. Three natural, not-yet-scoped continuations exist, in
-likely-priority order: (1) close `claims/c11.md`'s evidence gap (a real
-research pass, or an editorial call to soften/remove the claim) so
-Episode 1's `FACT_CHECK` can genuinely `PASS` and a human owner can
-consider `status = APPROVED` — this is the one concrete blocker on the
-actual episode right now; (2) a real `ResearchProvider` implementation
-(Phase 7G's own deferred follow-up), which would also give (1) an
-automated path; (3) per this phase's own explicit instruction, observe
-what a real, human-reviewed Episode 1 actually needs before building
-the Learning Engine, analytics, or any further automation — none of
-that is started, and none should be until there is real production
-experience to learn from. Publishing remains permanently human-gated per
-`CONSTITUTION.md` rule 2, regardless of anything built so far.
+report. With `claims/c11.md` closed, the one remaining concrete step
+before Episode 1 can move toward production is the human sensitive-
+content review described above — this system has done everything it can
+do on its own authority. Beyond that: (1) a real `ResearchProvider`
+implementation (Phase 7G's own deferred follow-up) would give future
+evidence gaps an automated closure path; (2) per this phase's own
+explicit instruction, observe what a real, human-reviewed Episode 1
+actually needs before building the Learning Engine, analytics, or any
+further automation — none of that is started, and none should be until
+there is real production experience to learn from. Publishing remains
+permanently human-gated per `CONSTITUTION.md` rule 2, regardless of
+anything built so far.

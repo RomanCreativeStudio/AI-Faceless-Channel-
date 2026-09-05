@@ -75,6 +75,15 @@ actually matter, and which parts don't help without the rest.
 "Which piece of modern knowledge do you think would have mattered most —
 germ theory, or quarantine? Tell us below."
 
+## AI disclosure plan
+
+This video uses AI-narrated voiceover and AI-generated illustrative
+visuals throughout. Disclosure will appear in two places: (1) an
+on-screen text card in the opening seconds stating "This video uses
+AI-generated narration and illustrations," and (2) a corresponding
+statement in the video description. This satisfies the `YES` marked
+above — see `CONTENT_ITEM.md`'s AI disclosure requirement.
+
 ## Visual requirements
 
 On-screen citation cards for WHO/Oxford/Britannica when their facts are

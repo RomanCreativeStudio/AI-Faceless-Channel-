@@ -36,8 +36,20 @@ _REVIEW_FILENAME_RE = re.compile(r"^(?P<role>[a-z_]+)-(?P<attempt>\d+)$")
 
 
 def normalize_claim_ref(token: str) -> str:
-    """"claims/c10.md" / "c10.md" / "c10" -> "c10"."""
+    """"claims/c10.md" / "c10.md" / "c10" -> "c10". A placeholder token
+    ("N/A", any case) is returned untouched — never path-split, since it
+    is not a path. (A real, previously-latent bug: rsplit("/", 1)[-1] on
+    the literal string "N/A" silently produced "A" — a single-letter
+    "claim reference" that resolves nothing, but rendered indistinguishably
+    from a real one in any file that echoes `derived_from` back out, e.g.
+    a revision successor's own "Derived from" table cell. Never triggered
+    by anything that only checks derived_from for truthiness/membership,
+    which is why it went unnoticed until a real successor claim actually
+    rendered a corrupted "N/A" value into a new file.)
+    """
     token = token.strip()
+    if token.upper() == "N/A":
+        return token
     base = token.rsplit("/", 1)[-1]
     if base.endswith(".md"):
         base = base[: -len(".md")]
@@ -45,8 +57,12 @@ def normalize_claim_ref(token: str) -> str:
 
 
 def normalize_research_ref(token: str) -> str:
-    """"research/01-who-plague-fact-sheet.md" -> "01-who-plague-fact-sheet"."""
+    """"research/01-who-plague-fact-sheet.md" -> "01-who-plague-fact-sheet".
+    Same "N/A" placeholder guard as normalize_claim_ref, for the identical
+    reason."""
     token = token.strip()
+    if token.upper() == "N/A":
+        return token
     base = token.rsplit("/", 1)[-1]
     if base.endswith(".md"):
         base = base[: -len(".md")]

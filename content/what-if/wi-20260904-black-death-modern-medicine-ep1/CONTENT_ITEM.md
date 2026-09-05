@@ -35,8 +35,8 @@ Current status: `SCRIPT`
 | Owner approval state | `NOT_STARTED` |
 | Research state | `COMPLETE` |
 | Script state | `COMPLETE` |
-| Fact-check state | `NOT_STARTED` |
-| Safety state | `NOT_STARTED` |
+| Fact-check state | `PASS` |
+| Safety state | `REVISION_REQUIRED` |
 | Originality state | `NOT_STARTED` |
 | Production state | `NOT_STARTED` |
 | QA state | `NOT_STARTED` |
@@ -78,3 +78,6 @@ the modeled uncertainty.
   `agents/producer/`'s real scene-builder lifts each numbered beat's text
   verbatim into a scene's spoken narration — beat-level description text
   was never intended to be spoken aloud as-is.
+- 2026-09-05 — [researcher agent] FACT_CHECK attempt #1 -> REVISION_REQUIRED (see reviews/fact_checker-1.md)
+- 2026-09-05 — [researcher agent] FACT_CHECK attempt #2 -> PASS (see reviews/fact_checker-2.md)
+- 2026-09-05 — [safety agent] SAFETY_REVIEW attempt #1 -> REVISION_REQUIRED (see reviews/safety_reviewer-1.md)
