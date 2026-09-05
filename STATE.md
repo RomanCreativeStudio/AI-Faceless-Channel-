@@ -1437,23 +1437,151 @@ passing** (501 baseline + 31 new; zero regressions, zero skips).
    human content approval (`status = APPROVED`) becomes the next and
    final gate — still a separate, later, human-only decision.
 
+## Completed (Phase 8 follow-up 4: owner-voice provider architecture)
+
+**Owner-voice requirement**: the channel's narration should eventually
+use the human owner's own voice identity, not the generic offline Flite
+voice — `Owner records/teaches voice → voice system generates narration
+in owner's voice → AI handles repetitive narration production → human
+reviews final audio`. This follow-up builds the provider architecture
+for that goal; it does **not** generate any owner-voice audio, since no
+real voice-cloning engine or credentials are configured in this
+environment (checked directly, not assumed — see below).
+
+**Implementation status: architecture and tests complete; provider not
+yet operational.**
+
+- `agents/voice/src/owner_voice.py` — `OwnerVoiceConfig` (reads
+  `OWNER_VOICE_ID`/`OWNER_VOICE_SAMPLE_PATH`/`OWNER_VOICE_ENGINE`/
+  `OWNER_VOICE_MODEL`/`OWNER_VOICE_LANGUAGE`/`OWNER_VOICE_STYLE`/
+  `OWNER_VOICE_STABILITY`/`OWNER_VOICE_CONSISTENCY`/
+  `OWNER_VOICE_PRONUNCIATION` from the environment; carries no credential
+  fields at all and never exposes the sample's path or contents in any
+  summary/log/persisted string — verified by dedicated tests);
+  `OwnerVoiceEngine` protocol + an empty-by-default registry (no vendor
+  chosen or hard-coded); `check_owner_voice_availability()` returning
+  `OWNER_VOICE_AVAILABLE`/`OWNER_VOICE_NOT_CONFIGURED` with a precise,
+  non-secret reason; `OwnerVoiceProvider` (a third `VoiceProvider`
+  implementation, alongside the existing test and Flite providers) whose
+  `generate()` raises `OwnerVoiceNotConfiguredError` — never falls back
+  to a different voice — whenever availability isn't genuinely met.
+  Every `GeneratedAudio` it could ever return carries an explicit
+  `OWNER_AUTHORIZED_VOICE` marker; there is no code path for cloning
+  anyone else's voice.
+- `agents/voice/src/provider_selection.py` — `resolve_voice_provider(name,
+  ...)`, supporting `local-test`, `local-fallback`, and `owner-voice` by
+  name; rejects any unrecognized name rather than silently defaulting.
+- `agents/voice/src/real_provider.py`'s `FliteVoiceProvider` gained a
+  second export name, `LocalFallbackVoiceProvider` — the same class,
+  never deleted or rewritten, named for its actual role now that an
+  owner-voice provider exists (dev/test/explicit-fallback only, never a
+  stand-in for the owner's voice).
+- `agents/voice/src/owner_voice_cli.py` — `python -m
+  agents.voice.src.owner_voice_cli` reports current availability and a
+  redacted configuration summary; never generates audio, never prints a
+  credential value or the sample's path/contents.
+- `.gitignore` gained `/owner_voice_samples/`, `/.private/`, and
+  `*.owner-voice-sample.*` so a locally-placed sample can never be
+  committed by accident.
+
+**Provider selection (this environment, checked directly, not
+assumed):** no TTS/voice-cloning Python package is installed, no
+`piper`/`espeak`/`festival` binary exists on `PATH`, and no
+voice/speech-related API key or credential environment variable is
+present. No commercial vendor was chosen — per this task's own
+instruction not to pick one "merely because it is popular," and per
+`agents/voice/CONTRACT.md`'s existing rule against committing this
+codebase to a specific provider. The engine registry is empty;
+`OWNER_VOICE_AVAILABLE` cannot be true here until a real engine is
+selected, implemented against the `OwnerVoiceEngine` protocol, and
+registered — a distinct, later, separately-validated step.
+
+**A real owner voice sample was provided this session** (an ~18s video
+of the owner speaking, uploaded to this conversation). It was **not**
+copied into this repository at any point — its audio was extracted only
+into this session's own scratch directory (outside the repo, outside
+git, never referenced by literal path in any committed file) purely to
+prove `check_owner_voice_availability()` correctly recognizes a real,
+non-empty sample file when `OWNER_VOICE_SAMPLE_PATH` points at it — it
+still, correctly, reports `OWNER_VOICE_NOT_CONFIGURED` (reason: no
+engine configured), since a sample alone is not a working provider. No
+owner-voice audio was fabricated, and Flite's output was never relabeled
+as the owner's voice.
+
+**Narration integrity preserved**: `OwnerVoiceProvider` receives the
+same PROVIDER-READY NARRATION every provider does and cannot alter it;
+existing structural QA (`qa.py`) applies unchanged; regression tests
+confirm script hash and narration text are preserved verbatim in
+`voice/voice-<n>.md` when generated via a (test-only, fake) owner-voice
+engine.
+
+**Human approval boundary preserved**: regression tests confirm voice
+generation via `OwnerVoiceProvider` never touches `CONTENT_ITEM.md`,
+never advances `Production status` beyond what QA passing already
+allows, and never approves/publishes anything — identical to every
+other provider.
+
+**35 new tests** (`agents/voice/tests/test_owner_voice.py`, 29;
+`agents/voice/tests/test_provider_selection.py`, 6): configuration
+(valid/missing/malformed, privacy of the redacted summary and
+configuration string), availability (every individual missing
+precondition, a registered fake engine reporting itself unavailable,
+missing/present credential *environment variable names*, full
+availability), generation (raises when unconfigured, never falls back,
+rejects empty narration, succeeds with a fake engine, fails on an engine
+producing no audio, two different `voice_id`s never collapse to the same
+label), provider selection (each of the three names, an unknown name
+rejected), and the pipeline-integration set described above. **Full
+suite: 567/567 passing** (532 baseline + 35 new; zero regressions, zero
+skips; the existing Flite/local-test providers, real FFmpeg renderer,
+captions, and Production QA are all untouched and still pass).
+
+**Golden sample confirmed untouched. Episode 1 unaffected**: still
+`WAITING_FOR_HUMAN_SAFETY_REVIEW` (from the prior follow-up); this work
+never touched Episode 1's `CONTENT_ITEM.md`, `SCRIPT.md`, reviews, or
+signoffs, and no production artifacts were regenerated for it.
+
+### Remaining setup requirement
+
+Real owner-voice narration requires, in order: (1) a human decision on
+which voice-generation approach to use (a specific local model or a
+specific paid cloud service), weighed against this task's own priorities
+(owner-authorized cloning, quality, privacy, cost, accessibility,
+cross-episode consistency) — this system deliberately did not make that
+choice; (2) implementing and registering one `OwnerVoiceEngine` adapter
+for that choice (a small, isolated addition — nothing else in
+`agents/voice/` needs to change); (3) the owner's actual consented voice
+sample and any required credentials supplied via the environment
+(`OWNER_VOICE_SAMPLE_PATH`, `OWNER_VOICE_ID`, `OWNER_VOICE_ENGINE`, plus
+whatever that engine's own `required_credential_env_vars` name); (4)
+only then, a real, explicit owner-voice generation as its own validation
+step — never claimed operational before that actually succeeds.
+
 ## Next task
 
 No further phase was specified as the "exact next task" beyond this
-report. Episode 1 is now at the cleanest state this system can reach on
-its own authority: `claims/c11.md` closed, `FACT_CHECK` genuinely
-`PASS`, `SAFETY_REVIEW` genuinely and correctly human-gated (not a
-defect), a real production pipeline validated end to end, a
-plain-language human-review package (`HUMAN_REVIEW.md`), and now an
-explicit, auditable mechanism for the human owner to actually record
-their Safety decision and have the pipeline continue on it. The one
-remaining concrete step is that human decision — once made, the next
-session should run `continue_after_human_safety_review()` (Originality on
-`CLEARED`, nothing further on `NOT_CLEARED`) and go no further. Beyond
-that: (1) a real `ResearchProvider` implementation (Phase 7G's own
-deferred follow-up) would give future evidence gaps an automated closure
-path; (2) per this phase's own explicit instruction, observe what a
-real, human-reviewed Episode 1 actually needs before building the
+report. Two independent tracks are now both at the cleanest state this
+system can reach on its own authority, and neither should advance
+further without a human action first:
+
+1. **Content review**: Episode 1 needs the human owner to read
+   `HUMAN_REVIEW.md` and record a Safety `CLEARED`/`NOT_CLEARED` decision
+   (`agents/safety/src/human_signoff_cli.py`). Once recorded, the next
+   session should run `continue_after_human_safety_review()` (Originality
+   on `CLEARED`, nothing further on `NOT_CLEARED`) and go no further.
+2. **Owner voice**: needs a human decision on which real voice-cloning
+   engine to use (see "Remaining setup requirement" above), then that
+   engine's adapter implemented and registered, then the owner's actual
+   sample/config supplied via the environment. Only after both a real
+   engine is configured *and* Episode 1's content review reaches human
+   approval should Episode 1 actually be produced in the owner's voice —
+   this task's own explicit instruction is not to regenerate Episode 1's
+   production artifacts yet.
+
+Beyond those two: (1) a real `ResearchProvider` implementation (Phase
+7G's own deferred follow-up) would give future evidence gaps an
+automated closure path; (2) per repeated explicit instruction, observe
+what a real, human-reviewed Episode 1 actually needs before building the
 Learning Engine, analytics, or any further automation — none of that is
 started, and none should be until there is real production experience to
 learn from. Publishing remains permanently human-gated per

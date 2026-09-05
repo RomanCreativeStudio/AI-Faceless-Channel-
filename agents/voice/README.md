@@ -76,6 +76,117 @@ A real cloud/paid TTS vendor remains a distinct, deliberate future
 `VoiceProvider` implementation — swapping one in requires no change to
 `pipeline.py`, `mutate.py`, or the schema, by design.
 
+## Owner voice (Phase 8 follow-up)
+
+**Goal:** `Owner records/teaches voice → voice system generates
+narration in the owner's voice → AI handles repetitive narration
+production → human reviews final audio.` This is a third
+`VoiceProvider` implementation (`agents/voice/src/owner_voice.py`'s
+`OwnerVoiceProvider`) — nothing in `pipeline.py`, `mutate.py`, or
+`templates/VOICE.md` changed for it to exist.
+
+**Authorization.** This provider exists only for the channel's human
+owner's own voice. Every `GeneratedAudio` it returns carries an explicit
+`OWNER_AUTHORIZED_VOICE` marker in its provider label (recorded into
+`voice/voice-<n>.md`'s `Provider` field automatically, via the existing
+schema — no template change needed). It is not, and must never become, a
+generic arbitrary-person voice-cloning system.
+
+**No vendor is selected or hard-coded.** Real synthesis is delegated to
+a small `OwnerVoiceEngine` protocol, looked up by name
+(`OWNER_VOICE_ENGINE`) in a registry that starts **empty**. This
+environment was checked directly (no TTS/voice-cloning package
+installed, no relevant API key or credential env var present, no
+`piper`/`espeak`/`festival` binary on `PATH`) — nothing was assumed.
+Until a specific engine is chosen and its adapter registered (a
+separate, later piece of work, per this task's own "Provider selection"
+priorities: owner-authorized cloning first, then quality, privacy,
+predictable cost, accessibility, and cross-episode consistency),
+`OwnerVoiceProvider` can never report itself available.
+
+**Configuration** — environment variables, all optional except where a
+real engine requires them:
+
+| Variable | Meaning |
+|---|---|
+| `OWNER_VOICE_ID` | The owner-authorized voice identifier (required) |
+| `OWNER_VOICE_SAMPLE_PATH` | Path to the owner's private voice sample — **never committed** (required) |
+| `OWNER_VOICE_ENGINE` | Which registered `OwnerVoiceEngine` to use — no default (required) |
+| `OWNER_VOICE_MODEL` | Model identifier, if the engine has one (optional) |
+| `OWNER_VOICE_LANGUAGE` | Defaults to `en` |
+| `OWNER_VOICE_STYLE` | Speaking style, as the engine defines it (optional) |
+| `OWNER_VOICE_STABILITY` / `OWNER_VOICE_CONSISTENCY` | 0–1 controls, only if the engine supports them (optional) |
+| `OWNER_VOICE_PRONUNCIATION` | `word=phonetic;word2=phonetic2` overrides (optional) |
+
+All of this is read once into an `OwnerVoiceConfig` (`from_env()`).
+Nothing vendor-specific appears in `pipeline.py`, `templates/VOICE.md`,
+or anywhere outside `agents/voice/src/owner_voice.py`.
+
+**Privacy.** `OWNER_VOICE_SAMPLE_PATH` points at a private, local file —
+this repository never reads its contents into any committed artifact,
+never persists it, and never echoes the path itself back in any log,
+error, or `voice/voice-<n>.md` record (`OwnerVoiceConfig.redacted_summary()`
+and `voice_configuration_string()` both omit it by construction — see
+their docstrings). `.gitignore` protects `/owner_voice_samples/`,
+`/.private/`, and `*.owner-voice-sample.*` in case a sample is ever
+placed inside this repository's working tree; nothing in this codebase
+creates a fake sample or a placeholder pretending to be the owner's
+voice.
+
+**Failure behavior.** `check_owner_voice_availability(config)` reports
+`OWNER_VOICE_AVAILABLE` or `OWNER_VOICE_NOT_CONFIGURED` with a specific,
+non-secret reason (missing voice ID, missing/nonexistent/empty sample,
+no engine configured, an unregistered engine name, missing credential
+*environment variable names* — never values, or the engine's own
+"not available" reason). `OwnerVoiceProvider.generate()` raises
+`OwnerVoiceNotConfiguredError` whenever that check fails — it never
+falls back to `LocalFallbackVoiceProvider` or `LocalTestVoiceProvider`
+and never returns placeholder/generic audio under the owner-voice label.
+Check current status any time, without generating anything:
+
+```
+python3 -m agents.voice.src.owner_voice_cli
+```
+
+**Fallback behavior.** `LocalFallbackVoiceProvider` (Phase 8's
+`FliteVoiceProvider`, now exported under this second, role-accurate
+name too — never deleted, never rewritten) remains available for tests,
+development, and any run that *explicitly* selects it via
+`agents/voice/src/provider_selection.py`'s `resolve_voice_provider(...)`.
+It never activates automatically in place of a failed owner-voice
+request.
+
+**Provenance.** Reuses `templates/VOICE.md`'s existing fields — no
+schema change. `Provider` carries the engine name, `OWNER_AUTHORIZED_VOICE`,
+and the voice ID; `Voice configuration` (`OwnerVoiceConfig.voice_configuration_string()`)
+carries engine/voice/model/language/style/stability/consistency as
+identifiers only; `Script content hash`, `Generated audio` (reference +
+duration), `Generation status`, and the generation timestamp are exactly
+the same fields every other provider populates. The raw sample is never
+stored in any of them — only identifiers.
+
+**Narration integrity.** `OwnerVoiceProvider` receives exactly the same
+PROVIDER-READY NARRATION every other provider does
+(`narration.py` — quote/whitespace normalization only) and cannot
+rewrite, summarize, or otherwise alter it; `agents/voice/src/qa.py`'s
+existing structural checks (narration non-empty, script hash matches,
+audio reference/duration recorded, provider metadata complete) apply
+unchanged.
+
+**Human approval boundary.** Voice generation — by any provider,
+including this one — never touches `CONTENT_ITEM.md`, never sets
+`status`, never advances Safety/Originality/approval state, and never
+publishes anything. Generating audio in the owner's voice is not itself
+an approval of anything; a human still reviews the final audio (and the
+full content-review chain still applies) before any of that happens.
+
+**Current status in this environment: not configured, by design.** No
+engine is registered, so `OWNER_VOICE_AVAILABLE` cannot be true here yet.
+Once a real engine is chosen and its adapter added (registered via
+`register_owner_voice_engine`), and the owner's actual sample/config is
+supplied via the environment, real generation becomes a separate,
+explicit validation step — never assumed or fabricated ahead of that.
+
 ## How it works
 
 - **Approval gate** (`pipeline.py`): requires `CONTENT_ITEM.md status ==
@@ -171,3 +282,9 @@ python3 -m unittest discover -s agents/voice/tests -t .
   `templates/VOICE.md`'s "typically one per production" design; a
   multi-track production isn't modeled yet.
 - **QA is structural only** — see "QA" above.
+- **`OwnerVoiceProvider` has no engine registered yet** — the adapter
+  boundary, configuration, capability detection, and tests all exist
+  (see "Owner voice" above), but no specific voice-cloning vendor/local
+  model has been selected or configured in this environment. Real
+  owner-voice narration is a separate, later validation step once one
+  is.

@@ -1,2 +1,10 @@
 __pycache__/
 *.pyc
+
+# Owner voice sample material (Phase 8 follow-up: agents/voice/src/owner_voice.py).
+# The channel owner's private voice recording must NEVER be committed —
+# OWNER_VOICE_SAMPLE_PATH may point anywhere on disk, but if placed
+# inside this repository it must live under one of these paths.
+/owner_voice_samples/
+/.private/
+*.owner-voice-sample.*

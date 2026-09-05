@@ -138,3 +138,12 @@ class FliteVoiceProvider:
             artifact_bytes=audio_bytes,
             artifact_extension="wav",
         )
+
+
+# Owner-voice follow-up: the same class under the name that reflects its
+# actual role once agents/voice/src/owner_voice.py's OwnerVoiceProvider
+# exists — a real, offline, no-credential fallback for tests/development
+# and for a run that explicitly chooses it, never a stand-in for the
+# owner's own voice. The original name is kept too (never deleted) since
+# existing code/tests already import it.
+LocalFallbackVoiceProvider = FliteVoiceProvider

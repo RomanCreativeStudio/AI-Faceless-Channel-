@@ -83,6 +83,18 @@ TTS provider is a second `VoiceProvider` implementation; nothing in
 add one. No specific commercial provider is named anywhere in this
 contract, `templates/VOICE.md`, or any code this phase.
 
+Phase 8 added `agents/voice/src/real_provider.py`'s `FliteVoiceProvider`
+(also exported as `LocalFallbackVoiceProvider` — same class, a name that
+reflects its actual role once an owner-voice provider exists: offline
+dev/test/explicit-fallback narration, never a stand-in for the owner's
+voice). A later follow-up added `agents/voice/src/owner_voice.py`'s
+`OwnerVoiceProvider` for the channel owner's own, explicitly authorized
+voice — a third `VoiceProvider` implementation, still nothing changed in
+`pipeline.py`/`mutate.py`/the schema. See `agents/voice/README.md`'s
+"Owner voice" section for configuration, privacy, and failure behavior;
+none of it is repeated here since none of it is specific to this
+contract's own rules.
+
 ## Inputs
 
 - `CONTENT_ITEM.md` (`status` — read-only)
@@ -147,6 +159,26 @@ The Voice agent must **never**:
   claim of production-quality speech; the test provider's output is
   always labeled `TEST / PLACEHOLDER AUDIO` in both the artifact file and
   `voice/voice-<n>.md`.
+- Silently substitute a different voice for the owner's own. A
+  production run that explicitly selects `OwnerVoiceProvider` and finds
+  it unconfigured/unavailable must fail with a clear, structured error
+  (`OwnerVoiceNotConfiguredError`) — never fall back to
+  `LocalFallbackVoiceProvider`/`LocalTestVoiceProvider` and quietly
+  produce generic narration under the same "GENERATED" label. See
+  `agents/voice/src/owner_voice.py`'s own module docstring.
+- Treat `OwnerVoiceProvider` as a generic arbitrary-person voice-cloning
+  system. It exists only for the channel's human owner's own,
+  consent-backed voice — every `GeneratedAudio` it returns carries an
+  explicit `OWNER_AUTHORIZED_VOICE` marker in its provider label, and
+  nothing in this codebase adds a path for cloning anyone else's voice.
+- Persist the owner's raw voice sample, or any TTS/voice-cloning
+  provider's credentials, into any committed file, `templates/VOICE.md`
+  record, log line, or error message. The sample is referenced only by a
+  private, environment-configured filesystem path
+  (`OWNER_VOICE_SAMPLE_PATH`) that this agent never reads the contents
+  of and never echoes back; credentials are read only by a registered
+  engine's own code, directly from the process environment, and are
+  never captured onto `OwnerVoiceConfig` or any result object.
 
 ## Re-running / staleness
 
