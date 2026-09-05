@@ -1334,21 +1334,127 @@ attempt).
 
 The episode is **not** published and **not** approved.
 
+## Completed (Phase 8 follow-up 3: explicit human Safety signoff mechanism)
+
+**Built the smallest clean mechanism for recording a human Safety
+decision, reusing existing architecture rather than redesigning the
+pipeline.** New pieces, all additive:
+
+- `templates/HUMAN_SAFETY_SIGNOFF.md` — schema for one human decision
+  record: reviewer, `CLEARED`/`NOT_CLEARED`, timestamp, the exact content
+  hash reviewed, which Safety signal(s) it addresses, confirmation the
+  flagged subject matter was read in context, review scope, and optional
+  notes. Same numbered-attempt, never-overwritten convention as
+  `templates/REVIEW.md`.
+- `agents/safety/src/human_signoff.py` — the record model, a loader
+  (`load_human_safety_signoffs`, fails closed on a malformed file rather
+  than silently ignoring or trusting it), and
+  `record_human_safety_decision()` (the only function that writes one;
+  requires every field explicitly, refuses `NOT_CLEARED` without notes,
+  never called automatically by any agent).
+- `agents/safety/src/human_signoff_cli.py` — `python -m
+  agents.safety.src.human_signoff_cli <dir> --reviewer ... --decision
+  CLEARED|NOT_CLEARED --signals ... --scope ... [--historical-context-
+  reviewed] [--notes ...]`. `--decision` has no default — the only way to
+  record a decision is to type one. The reviewed-content hash and the
+  triggering review attempt are computed automatically from current
+  on-disk state at the moment the command runs, never typed by hand.
+- `agents/orchestrator/src/human_safety_continuation.py` —
+  `continue_after_human_safety_review()`, the one function that lets a
+  content item move past a `SAFETY_REVIEW` human escalation into
+  `ORIGINALITY_REVIEW`. In order: (1) an automated Safety review must
+  have run at least once; (2) a human signoff must exist and be
+  `CLEARED`; (3) the signoff's own recorded hash must still match the
+  content's *current* hash (otherwise `STALE_SIGNOFF` — the script/
+  content changed since clearance, and a new human review is required);
+  (4) re-evaluating Safety's real signals live right now must show no
+  blocking finding (`HIGH_RISK` or `REVIEW_REQUIRED`) outside exactly
+  what the signoff declares it covers (`BLOCKED_OTHER_SAFETY_FINDING`
+  otherwise — a clearance for `SENSITIVE_CONTENT` never overrides an
+  unrelated `DANGEROUS_INSTRUCTION` finding, now or later). Only once all
+  four hold does it call the real `run_originality_review`. It never
+  runs Safety itself, never writes to `reviews/safety_reviewer-*.md`, and
+  never touches `CONTENT_ITEM.md`'s `status`.
+
+**A `NOT_CLEARED` decision leaves the item at `EDITORIAL_REVISION_
+REQUIRED`** — no automatic retry, script rewrite, or Originality run.
+**No signoff at all** reports `WAITING_FOR_HUMAN_SAFETY_REVIEW`.
+
+**A genuine, previously-latent bug was found and fixed along the way**:
+`agents/safety/src/hashing.py`'s `compute_reviewed_content_hash` hashed
+the *entire* `CONTENT_ITEM.md` file — including the `Safety state` field
+and `Notes / history log` line that this very agent's own `_apply_result`
+writes *immediately after* computing that hash. That made every freshly-
+applied Safety review's own stored hash mismatch the content on disk the
+instant you checked it again, silently defeating
+`agents/orchestrator/src/freshness.py`'s PASS-reuse check for Safety
+specifically (discovered only because the new continuation mechanism
+actually exercises this path for the first time — Researcher's
+equivalent hash never includes `CONTENT_ITEM.md` at all, so it never hit
+this). Fixed by scoping the hash to `CONTENT_ITEM.md`'s Identity section
+only (title/premise) — matching the function's own docstring, which
+already said "Identity table text," and the one part of the file this
+role actually needs to care about and never itself writes to.
+
+**Demonstrated against the real Episode 1**, with no fabricated
+decision: `continue_after_human_safety_review()` correctly reports
+`WAITING_FOR_HUMAN_SAFETY_REVIEW` — no `human_safety_signoffs/` directory
+exists yet. `HUMAN_REVIEW.md` gained a "Human Safety Decision Required"
+section with the exact CLI command the human owner runs, what `CLEARED`
+vs. `NOT_CLEARED` means, and an explicit reminder that clearing Safety
+does not approve the episode. Canonical `CONTENT_ITEM.md`'s `status`
+remains `SCRIPT`; `Fact-check state`/`Safety state` are unchanged in
+substance (`PASS` / `REVISION_REQUIRED`).
+
+**31 new regression tests** (`agents/safety/tests/test_human_signoff.py`,
+15; `agents/orchestrator/tests/test_human_safety_continuation.py`, 16):
+valid clearance (correct hash, only-intended-signal coverage, a stale
+*automated review record* alone does not block a fresh valid signoff);
+invalid clearance (missing signoff, no automated review ever run,
+`NOT_CLEARED`, wrong/fabricated hash, script changed after signoff,
+`CONTENT_ITEM.md` changed after signoff, an unrelated `HIGH_RISK`/
+`REJECT`-tier finding never overridden, a malformed signoff file);
+security/integrity (tampering with a review's `Verdict` text cannot
+manufacture clearance since live signals are always re-evaluated
+independently of any stored verdict text; a `CLEARED` continuation never
+sets `status = APPROVED`; a stale clearance never lets Originality run;
+running Safety alone never creates a signoff). **Full suite: 532/532
+passing** (501 baseline + 31 new; zero regressions, zero skips).
+
+**Golden sample confirmed untouched.**
+
+### Exact next human action (unchanged)
+
+1. Read `HUMAN_REVIEW.md`'s "Human Safety Decision Required" section and
+   run the `human_signoff_cli` command with `--decision CLEARED` or
+   `--decision NOT_CLEARED`. This system will not infer or simulate this
+   decision.
+2. If `CLEARED` and no other Safety blocker exists,
+   `continue_after_human_safety_review()` will run `ORIGINALITY_REVIEW`
+   for real on the next invocation — the next Claude session/prompt
+   should do exactly that, and no more, once this decision actually
+   exists. If Originality then passes, content review reaches `PASS` and
+   human content approval (`status = APPROVED`) becomes the next and
+   final gate — still a separate, later, human-only decision.
+
 ## Next task
 
 No further phase was specified as the "exact next task" beyond this
 report. Episode 1 is now at the cleanest state this system can reach on
 its own authority: `claims/c11.md` closed, `FACT_CHECK` genuinely
 `PASS`, `SAFETY_REVIEW` genuinely and correctly human-gated (not a
-defect), a real production pipeline validated end to end, and a
-plain-language human-review package (`HUMAN_REVIEW.md`) prepared. The one
-remaining concrete step is the human sensitive-content review described
-above. Beyond that: (1) a real `ResearchProvider` implementation
-(Phase 7G's own deferred follow-up) would give future evidence gaps an
-automated closure path; (2) per this phase's own explicit instruction,
-observe what a real, human-reviewed Episode 1 actually needs before
-building the Learning Engine, analytics, or any further automation —
-none of that is started, and none should be until there is real
-production experience to learn from. Publishing remains permanently
-human-gated per `CONSTITUTION.md` rule 2, regardless of anything built so
-far.
+defect), a real production pipeline validated end to end, a
+plain-language human-review package (`HUMAN_REVIEW.md`), and now an
+explicit, auditable mechanism for the human owner to actually record
+their Safety decision and have the pipeline continue on it. The one
+remaining concrete step is that human decision — once made, the next
+session should run `continue_after_human_safety_review()` (Originality on
+`CLEARED`, nothing further on `NOT_CLEARED`) and go no further. Beyond
+that: (1) a real `ResearchProvider` implementation (Phase 7G's own
+deferred follow-up) would give future evidence gaps an automated closure
+path; (2) per this phase's own explicit instruction, observe what a
+real, human-reviewed Episode 1 actually needs before building the
+Learning Engine, analytics, or any further automation — none of that is
+started, and none should be until there is real production experience to
+learn from. Publishing remains permanently human-gated per
+`CONSTITUTION.md` rule 2, regardless of anything built so far.

@@ -143,6 +143,72 @@ being satisfied mechanically.
 
 ---
 
+## Human Safety Decision Required
+
+This is the one decision this package exists to collect. Read the
+"Safety" section above (and the script itself, if you want more than the
+summary), then choose one:
+
+**`CLEARED`** — you have reviewed the script and visual treatment above
+and judge this historical, statistically-hedged, non-graphic treatment
+of a real tragedy appropriate to proceed past this specific Safety
+signal.
+
+**`NOT_CLEARED`** — you judge that something about the treatment (tone,
+framing, a passage you'd want changed) needs to be revised first.
+
+Before deciding, please keep in mind:
+
+- This is historical educational content about a real, well-documented
+  event (the Black Death, 1347–1351).
+- The word "plague" is triggering a deterministic Safety keyword
+  detector (`SENSITIVE_CONTENT`) — the detector has no ability to judge
+  tone, quality, or context; it flags the *topic*, not a defect.
+- The script was inspected end to end for graphic, exploitative, or
+  sensational treatment. **None was found** — see Section 2 above for
+  specifics and citations.
+- Clearing this signal does **not** approve the episode for publication.
+  `ORIGINALITY_REVIEW` still has to run, and final content approval
+  (`CONTENT_ITEM.md status = APPROVED`) remains a completely separate,
+  later decision that only you make.
+
+Nothing in this system will infer your decision from any other action
+(editing this file, rerunning a command, committing code) — it has to be
+recorded explicitly. To record it, run one command from the repository
+root:
+
+```
+python -m agents.safety.src.human_signoff_cli \
+  content/what-if/wi-20260904-black-death-modern-medicine-ep1 \
+  --reviewer "<your name>" \
+  --decision CLEARED \
+  --signals SENSITIVE_CONTENT \
+  --scope "Read HUMAN_REVIEW.md in full, plus SCRIPT.md and the per-scene visual treatment described in Section 2." \
+  --historical-context-reviewed
+```
+
+(Use `--decision NOT_CLEARED` and add `--notes "<what needs to change>"`
+instead, if that's your decision.) This writes a new, permanent, numbered
+record under `human_safety_signoffs/` — it never edits or replaces the
+automated `reviews/safety_reviewer-2.md` escalation, which stays exactly
+as `agents/safety/` wrote it. The command computes the content hash it
+signs off on automatically, from whatever is on disk at the moment you
+run it (currently `6317c7ae6b847d8fea345b392f187228de39d09111997d1e1631ff73922a526e`
+— shown here only so you can spot-check it if you like; if `SCRIPT.md` or
+`CONTENT_ITEM.md` change before you run the command, it will compute a
+different value automatically, and that's correct).
+
+Once a `CLEARED` decision is recorded, running
+`agents/orchestrator/src/human_safety_continuation.py`'s
+`continue_after_human_safety_review()` against this content item will
+verify it (decision, hash freshness, and that no *other* Safety finding
+is outstanding) and, only if everything checks out, run
+`ORIGINALITY_REVIEW` for real. A `NOT_CLEARED` decision leaves the item
+blocked with a clear `EDITORIAL_REVISION_REQUIRED` status instead —
+nothing will retry automatically.
+
+---
+
 ## 3. Originality
 
 **Not reached.** `agents/orchestrator/`'s `run_automated_review` runs

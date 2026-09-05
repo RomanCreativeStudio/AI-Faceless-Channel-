@@ -51,7 +51,13 @@ Current status: `SCRIPT`
   `claims/c12.md` (`c5` is superseded by `c12` — see `c5.md`)
 - Script: `SCRIPT.md`
 - Reviews: `reviews/fact_checker-1.md`, `reviews/fact_checker-2.md`,
-  `reviews/safety_reviewer-1.md`; revisions: `revisions/revision-1.md`
+  `reviews/safety_reviewer-1.md`, `reviews/safety_reviewer-2.md`;
+  revisions: `revisions/revision-1.md`
+- Human Safety signoffs: none yet — see `HUMAN_REVIEW.md`'s "Human
+  Safety Decision Required" section for how the human owner records one
+  (`agents/safety/src/human_signoff_cli.py`); once recorded, verified via
+  `agents/orchestrator/src/human_safety_continuation.py`'s
+  `continue_after_human_safety_review()`
 - Human review package: `HUMAN_REVIEW.md` (plain-language summary for
   the content owner — not part of the automated review chain)
 - Video QA: none yet (no production against the canonical episode;
@@ -95,3 +101,20 @@ the modeled uncertainty.
   package (editorial summary, exact Safety trigger, visual treatment,
   production status, and the two remaining human decisions).
 - 2026-09-05 — [safety agent] SAFETY_REVIEW attempt #2 -> REVISION_REQUIRED (see reviews/safety_reviewer-2.md)
+- 2026-09-05 — Built an explicit, auditable human Safety signoff
+  mechanism (`agents/safety/src/human_signoff.py`,
+  `agents/safety/src/human_signoff_cli.py`,
+  `agents/orchestrator/src/human_safety_continuation.py`; schema at
+  `templates/HUMAN_SAFETY_SIGNOFF.md`) so a human `CLEARED`/`NOT_CLEARED`
+  decision on the SAFETY_REVIEW escalation above can be recorded and
+  verified without manual file surgery. No decision has been recorded
+  for this item — `continue_after_human_safety_review()` correctly
+  reports `WAITING_FOR_HUMAN_SAFETY_REVIEW`. This work also found and
+  fixed a genuine, previously-latent bug in
+  `agents/safety/src/hashing.py` (its `Reviewed content hash` hashed the
+  entire `CONTENT_ITEM.md` file, including the very Safety-state/Notes-
+  log fields this agent's own apply step writes immediately afterward,
+  self-invalidating every fresh Safety review the moment it was written;
+  narrowed to the Identity section only, matching the hash function's
+  own stated intent). This item's `Fact-check state`/`Safety state`
+  values above are unchanged in substance by any of this.
