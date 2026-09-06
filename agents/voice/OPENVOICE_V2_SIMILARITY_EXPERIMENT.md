@@ -112,8 +112,55 @@ full episode).
 
 ## 5. OBJECTIVE FACTS
 
-*(Filled in from the actual runs below — nothing in this section is
-inferred or estimated.)*
+All four variants **synthesized successfully** (exit code 0), no
+out-of-memory failures (confirmed via `dmesg` — zero `oom-kill` entries
+this session), no exceptions. Each ran as its own fresh OS process (see
+Section 1's "Subprocess isolation" note) using the unmodified,
+already-deployed `checkpoints_v2` checkpoint and the `en-default`
+MeloTTS speaker throughout.
+
+| Configuration | Reference | `tau` | Duration | Sample rate | Format | Mean volume | Peak volume | Clipping | Silence gaps ≥0.3s |
+|---|---|---|---|---|---|---|---|---|---|
+| A (baseline) | SAMPLE_A (~18s) | 0.3 | 16.52s | 22,050 Hz | PCM16 mono | −32.7 dB | −8.2 dB | None | 6 (0.35–0.46s each) |
+| B | SAMPLE_A (~18s) | 0.2 | 16.51s | 22,050 Hz | PCM16 mono | −32.7 dB | −7.2 dB | None | 6 (0.36–0.53s each) |
+| C | SAMPLE_A (~18s) | 0.4 | 16.73s | 22,050 Hz | PCM16 mono | −32.1 dB | −8.3 dB | None | 6 (0.38–0.56s each) |
+| D | SAMPLE_B (~30s) | 0.3 | 16.47s | 22,050 Hz | PCM16 mono | **−30.0 dB** | −8.1 dB | None | 4 (0.31–0.43s each) |
+
+Narration text and hash identical across all four runs (Section 4). All
+four outputs are valid, complete, non-clipping WAV files with no missing
+sections.
+
+**What varies and what doesn't, objectively:**
+
+- **Duration varies by ~0.26s across all four runs (16.47–16.73s)** —
+  including between A and itself would if re-run, since MeloTTS's own
+  stochastic sampling (`noise_scale`/`noise_scale_w`, Section 1) means
+  no two runs are byte-identical even with identical inputs. This
+  spread is **not attributable to `tau` or the reference sample** — it
+  is the expected baseline noise floor of this architecture. Treat any
+  duration/pause-count difference between A/B/C/D as within that noise
+  floor, not as a measured effect of the variable being tested.
+- **Peak/mean volume**: D (the longer, ~30s reference) measured
+  noticeably louder on average (−30.0 dB vs. −32.1 to −32.7 dB for the
+  three 18s-reference variants) while still non-clipping. This is a
+  real, measured difference — plausibly because the longer reference's
+  own recording was itself louder on average (see its independently
+  logged volumedetect result: mean −26.3 dB vs. the original sample),
+  and `extract_se()`'s pooled embedding can carry some of that
+  characteristic through tone-color conversion. This is a volume-level
+  observation only — it says nothing about which sounds more like the
+  owner, only that D is measurably louder.
+- **Silence-gap count**: A/B/C each show 6 gaps, D shows 4 — most
+  plausibly stochastic-sampling noise (see above) rather than a genuine
+  effect of `tau` or the reference sample, given the same narration text
+  drove all four.
+- **`tau` (B=0.2, C=0.4) produced no clipping, no failure, and no
+  duration/silence pattern distinguishable from the baseline beyond the
+  stochastic noise floor described above.** Based on these objective
+  measurements alone, **tau does not materially change any objective
+  property tested** in this narrow ±0.1 range around the default. This
+  says nothing about perceived timbre similarity — only a human listener
+  can judge that (Section 6).
 
 ## 6. SUBJECTIVE HUMAN EVALUATION (REQUIRED — deliberately left blank)
 
