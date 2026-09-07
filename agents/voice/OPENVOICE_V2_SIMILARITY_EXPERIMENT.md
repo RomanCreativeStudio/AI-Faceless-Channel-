@@ -162,18 +162,26 @@ sections.
   says nothing about perceived timbre similarity — only a human listener
   can judge that (Section 6).
 
-## 6. SUBJECTIVE HUMAN EVALUATION (REQUIRED — deliberately left blank)
+## 6. SUBJECTIVE HUMAN EVALUATION — COMPLETE (owner's own listening, 2026-09-07)
 
-These fields can only be filled in by the owner actually listening to
-each file. **Nothing here is invented, inferred, or estimated by any
-automated process.**
+Recorded exactly as the owner stated it — nothing below is invented,
+inferred, or estimated. Any cell not explicitly addressed by the owner
+is marked "not separately rated," never filled in by guesswork.
 
 | Configuration | Perceived similarity to owner's voice | Naturalness | Pronunciation | Cadence | Emotional delivery | Artifact level | Overall preference |
 |---|---|---|---|---|---|---|---|
-| A (baseline, 18s, tau=0.3) | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
-| B (18s, tau=0.2) | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
-| C (18s, tau=0.4) | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
-| D (30s, tau=0.3) | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| A (baseline, 18s, tau=0.3) | not separately rated | not separately rated | not separately rated | not separately rated | not separately rated | not separately rated | not selected |
+| B (18s, tau=0.2) | not separately rated | not separately rated | not separately rated | not separately rated | not separately rated | not separately rated | not selected |
+| C (18s, tau=0.4) | **"represents the owner well"** | not separately rated | not separately rated | not separately rated | not separately rated | not separately rated | not selected — **"slightly quieter"** than D |
+| D (30s, tau=0.3) | **"sounds like the owner"** | not separately rated | not separately rated | not separately rated | not separately rated | not separately rated | **SELECTED — production reference** ("noticeably more audible/clear") |
+
+**Decision:** D is now the production owner-voice reference (see
+`agents/voice/OWNER_VOICE_REFERENCE.md` for the full, auditable record).
+`tau` stays at `0.3` — the owner explicitly declined to change it to
+`0.4` on the strength of C's positive-but-quieter result, since Section
+5's controlled experiment did not establish an objective similarity
+improvement from `tau=0.4`, and declined further tau-tuning unless a
+new controlled experiment is explicitly requested.
 
 Note on "Cadence" in this table: per Section 3 above, cadence is **not**
 something this architecture can vary based on the reference sample or

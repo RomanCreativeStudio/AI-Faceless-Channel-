@@ -220,7 +220,19 @@ an operator must, in the same process:
    every normal test/CI run still sees an empty registry.
 3. Set `OWNER_VOICE_ENGINE=openvoice-v2`, `OWNER_VOICE_ID`,
    `OWNER_VOICE_SAMPLE_PATH` (a private, local path — never inside this
-   repository), and `OPENVOICE_V2_CHECKPOINT_DIR` in the environment.
+   repository's *tracked* content — see below), and
+   `OPENVOICE_V2_CHECKPOINT_DIR` in the environment.
+
+**Which sample to point `OWNER_VOICE_SAMPLE_PATH` at**: the currently
+active, owner-selected reference is recorded in
+`agents/voice/OWNER_VOICE_REFERENCE.md` — a committed manifest
+(metadata and a SHA-256 checksum only, never audio content) naming a
+stable, repo-relative, gitignored path
+(`owner_voice_samples/production_reference.wav`) as of the owner's own
+listening-based decision. That directory (`/owner_voice_samples/`) is
+fully gitignored (see `.gitignore`) — files placed there are never
+committed, but persist locally across sessions, giving every future run
+a deterministic, auditable reference rather than an ad-hoc scratch path.
 
 Once all three are true, `resolve_voice_provider("owner-voice")` (or an
 explicit `OwnerVoiceConfig`/`OwnerVoiceProvider`) genuinely produces

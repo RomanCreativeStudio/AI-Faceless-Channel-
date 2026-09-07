@@ -1915,3 +1915,53 @@ Learning Engine, analytics, or any further automation — none of that is
 started, and none should be until there is real production experience to
 learn from. Publishing remains permanently human-gated per
 `CONSTITUTION.md` rule 2, regardless of anything built so far.
+
+## Completed (Phase 8 follow-up 9: voice-similarity experiment, D reference selected)
+
+A controlled, four-variant OpenVoice V2 similarity experiment
+(`agents/voice/OPENVOICE_V2_SIMILARITY_EXPERIMENT.md`) tested the
+existing ~18s sample at `tau` 0.2/0.3/0.4 and a new, owner-provided ~30s
+sample at `tau=0.3`, against one fixed, real Episode 1 sentence, through
+a standalone throwaway harness that never modified
+`agents/voice/src/engines/` (confirmed via `git diff`). Objectively: tau
+in that ±0.1 range produced no measurable difference beyond this
+architecture's own stochastic-sampling noise floor (MeloTTS's
+`noise_scale`/`noise_scale_w` mean no two runs are byte-identical even
+with identical inputs); the longer sample measured noticeably louder.
+Also documented, grounded directly in `openvoice/api.py`'s source: this
+architecture (MeloTTS prosody + OpenVoice tone-color conversion) cannot
+carry cadence, pause placement, or emphasis from any reference sample —
+those come from MeloTTS's own text-driven prosody model, full stop; a
+longer/better sample can only improve timbre/tone-color similarity.
+
+**The owner listened and decided**: the ~30s sample (tau=0.3, "D") is
+selected as the production reference — "sounds like the owner,
+noticeably more audible/clear." `tau` stays at 0.3 (already the
+production default by omission — no code change needed); the owner
+explicitly declined to change it to 0.4 despite a positive-but-quieter
+result on that variant, since the controlled experiment didn't establish
+an objective improvement, and declined further tau-tuning absent a new
+explicit request.
+
+**Made deterministic and auditable**: both samples now live at a
+stable, repo-relative, fully gitignored location
+(`owner_voice_samples/production_reference.wav` for the active D
+reference, `owner_voice_samples/baseline_18s_experimental.wav` preserved
+as the superseded baseline — neither ever committed, confirmed via `git
+status`). A new committed manifest, `agents/voice/OWNER_VOICE_REFERENCE.md`,
+records the active reference's metadata and SHA-256 checksum (never raw
+audio) plus the full decision provenance, so any future session can
+determine the active reference without guessing. 7 new regression tests
+(`test_owner_voice_reference_manifest.py`) check the manifest exists,
+names no real absolute private path, records `tau=0.3`, and that
+`owner_voice_samples/` stays gitignored. **Full suite: 622/622 passing**
+(615 + 7 new).
+
+Episode 1's full narration was regenerated, for real, against a *fresh*
+isolated validation copy (never the canonical episode, never the
+previous validation copy — kept separate so its own evidence isn't
+overwritten) using the new D reference through the unmodified production
+pipeline — *(result: elapsed time, output size, duration,
+ffprobe-verified audio properties, and Voice QA outcome: pending
+completion of that still-in-progress run at commit time; a follow-up
+commit records the real numbers)*.
