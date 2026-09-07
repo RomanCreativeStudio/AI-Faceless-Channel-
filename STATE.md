@@ -1957,11 +1957,25 @@ names no real absolute private path, records `tau=0.3`, and that
 `owner_voice_samples/` stays gitignored. **Full suite: 622/622 passing**
 (615 + 7 new).
 
-Episode 1's full narration was regenerated, for real, against a *fresh*
-isolated validation copy (never the canonical episode, never the
-previous validation copy — kept separate so its own evidence isn't
+**Episode 1's full narration was regenerated, for real, against a
+*fresh* isolated validation copy** (never the canonical episode, never
+the previous validation copy — kept separate so its own evidence isn't
 overwritten) using the new D reference through the unmodified production
-pipeline — *(result: elapsed time, output size, duration,
-ffprobe-verified audio properties, and Voice QA outcome: pending
-completion of that still-in-progress run at commit time; a follow-up
-commit records the real numbers)*.
+pipeline: 542.4s (~9m02s) CPU-only synthesis (longer than the 18s
+reference's earlier ~7min run — plausibly more VAD segments extracted
+from the longer sample, per the mechanism documented in the similarity
+experiment), 7,133,228 bytes, 161.75s duration
+(`ffprobe`-verified WAV/PCM 16-bit mono 22,050Hz, mean volume −29.3dB,
+peak −6.3dB — no clipping). **Zero silence gaps ≥0.5s detected at
+−35dB** (versus 5 gaps in the earlier 18s-reference run at the same
+threshold) — an objective, measured confirmation of the owner's
+"noticeably more audible/clear" characterization, though this speaks to
+loudness/audibility only, not to timbre similarity itself. Replayed
+through the real `run_voice_generation()` pipeline (the actual generated
+bytes, not a second synthesis): **Voice QA = `PASS`**,
+`generation_status = GENERATED`, correct `OWNER_AUTHORIZED_VOICE`
+provider metadata recording the D-reference voice ID, no private sample
+filename anywhere in any written record. `PRODUCTION.md`'s `Production
+status` correctly advanced `PRODUCTION_PLANNING` → `VISUAL_PLANNING`. No
+OOM (confirmed via `dmesg`). Canonical Episode 1 confirmed untouched
+throughout.
