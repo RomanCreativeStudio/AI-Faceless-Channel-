@@ -2099,3 +2099,50 @@ remains entirely the human owner's own, separate, later decision.
 `HUMAN_REVIEW.md` updated to reflect all of this. Golden sample and
 canonical Episode 1 approval state confirmed untouched throughout
 (`git status --porcelain` checked at every step).
+
+## Completed (Phase 8 follow-up 12: Final Owner Approval Checklist prepared; second hash self-invalidation bug found and fixed)
+
+Prepared a **FINAL OWNER APPROVAL CHECKLIST** at the top of Episode 1's
+`HUMAN_REVIEW.md` — an 11-row scannable summary (topic/title, claims,
+FACT/ASSUMPTION/INFERENCE/SPECULATION breakdown, Safety human-cleared
+status, Originality `PASS` + the acknowledged-fixture relationship, AI
+disclosure, owner-voice authorization, production readiness, known
+production limitations, remaining blockers, and the exact action
+required from the owner) with every line citing its underlying record.
+**No blocker to approval was found** — the episode is **READY FOR OWNER
+APPROVAL**.
+
+**A second, independent hash self-invalidation bug found and fixed**
+while verifying the checklist's own claims against live re-computation
+(not merely trusted from stored files): Originality's `compute_reviewed_
+content_hash()` hashed the *entire* `CONTENT_ITEM.md`, including the
+`Originality state` field and Notes/history-log line its own apply step
+writes immediately afterward — the identical bug already found and fixed
+for Safety on 2026-09-05, independently present and unfixed in
+Originality since it was first built. Confirmed directly: a live re-hash
+of Episode 1's already-`PASS`ed content no longer matched `reviews/
+originality_reviewer-2.md`'s own stored hash, despite no genuine content
+change — defeating `agents/orchestrator/src/freshness.py`'s generic
+PASS-reuse check for Originality specifically (every fresh `PASS` looked
+stale the instant it was written). **Fixed** by scoping the hash to the
+Identity + Originality-context sections only (mirroring Safety's exact
+fix and reasoning) — the only two sections `signals.py` actually reads.
+4 new regression tests
+(`agents/originality/tests/test_hash_self_invalidation_fix.py`) prove
+the stored hash now survives the apply step and stays sensitive to
+genuine Identity/Originality-context changes. Re-ran Originality once
+more for real against the canonical episode with the fix applied —
+`reviews/originality_reviewer-3.md`, verdict `PASS`, hash independently
+confirmed to survive its own apply step this time. **Full suite:
+634/634 passing** (630 + 4 new).
+
+`CONTENT_ITEM.md`'s `Current status` remains `SCRIPT` throughout —
+**never** set to `APPROVED` by this system, under any instruction.
+Golden sample confirmed untouched. Owner voice (OpenVoice V2, locked
+production reference "D", `tau=0.3`) unaffected and unchanged. The known
+production-phase limitation (two `RETRIEVED`-strategy assets with no
+real retrieval integration yet — `agents/production_qa/CONTRACT.md`'s
+own documented, honest limitation) was re-confirmed as a normal
+production-phase task, not an approval blocker, and was **not** worked
+around: no asset has ever been, or will be, marked `RETRIEVED` without
+genuine provenance.

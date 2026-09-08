@@ -16,6 +16,29 @@ agent) — it summarizes that chain's real output for a human decision.
 
 ---
 
+## FINAL OWNER APPROVAL CHECKLIST
+
+Prepared 2026-09-09, at commit `6dc9452`. Every line below cites the
+exact record it was pulled from — nothing here is asserted without a
+source. Full detail for every item is in the numbered sections below;
+this is the scannable summary.
+
+| # | Item | Status |
+|---|---|---|
+| 1 | **Topic / title** | "What If Modern Medicine Existed During the Black Death?" — short-form explainer, `what-if` pillar. History/science-curious general audience. |
+| 2 | **What the episode claims** | A bounded hypothetical: if select 14th-century communities had germ theory, case-tracking, sanitation, and quarantine capability (but no antibiotics/vaccines/diagnostics/hospitals), the *spread* of the Black Death could plausibly have slowed — but individual fatality outcomes would not have changed. Explicitly **not** "modern medicine saves the day" (see `SCRIPT.md`'s Conclusion). |
+| 3 | **FACT / ASSUMPTION / INFERENCE / SPECULATION** | Fully separated per claim, all `FACT`-classified claims (`c1`,`c2`,`c3`,`c10`,`c11`) `VERIFIED` as of `reviews/fact_checker-2.md`. `ASSUMPTION` = the granted scenario (`c4`,`c12`). `INFERENCE` = plausible-not-established effects (`c6`,`c7`). `SPECULATION` = explicitly-unknowable death-toll/adoption questions (`c8`,`c9`), never stated as established outcomes — see Section 1 below and `SCRIPT.md`'s own "What If? fact/hypothesis separation". |
+| 4 | **Safety** | Automated `Safety state` = `REVISION_REQUIRED` (by design — `SENSITIVE_CONTENT` keyword `'plague'` never auto-clears, per `agents/safety/README.md`). **Human signoff = `CLEARED`**, recorded 2026-09-08 (`human_safety_signoffs/signoff-1.md`), hash-verified current and fully covering. Script inspected end to end: no graphic/exploitative/sensational content found. |
+| 5 | **Originality** | `PASS` (`reviews/originality_reviewer-3.md`). The one raw finding — 100% topic/premise overlap with `wi-20260902-black-death-modern-medicine` — is the deliberate, documented engineering-fixture relationship this episode was built from (see Section 3 below and `agents/originality/CONTRACT.md`'s "Acknowledged internal engineering fixture exception"), not an accidental/external duplicate. Every other signal `LOW_RISK`/`NOT_APPLICABLE`. |
+| 6 | **AI disclosure** | Required (`YES`) and planned: opening on-screen text card + video-description statement (`SCRIPT.md`'s "AI disclosure plan"). Safety's own `AI_DISCLOSURE` signal: `LOW_RISK`. |
+| 7 | **Owner voice authorization** | OpenVoice V2, locked production reference "D" (30s sample, `tau=0.3`) — `agents/voice/OWNER_VOICE_REFERENCE.md`. Owner-selected via direct listening; sample stays local/gitignored; no cloud upload; no other provider substituted. |
+| 8 | **Production readiness** | **Not yet started against the canonical episode** (no `PRODUCTION.md` exists — Producer requires `status = APPROVED`, which hasn't happened). Validated only against isolated, throwaway copies: real narration, real MP4 (playable), real captions, real thumbnail all previously produced successfully in validation — see Section 4 below. |
+| 9 | **Known production limitations** | Two of seven scenes (mortality timeline; absence-of-germ-theory) are `FACT`-classified → default to `RETRIEVED` asset strategy, and no real image retrieval integration exists yet (`agents/production_qa/CONTRACT.md`'s own documented, honest limitation — "working as intended, not a bug to route around"). A real, on-topic, public-domain candidate (Pasteur portrait) was already found for one scene; none was found for the other (script itself calls for a diagram there, not a photo). **Not a defect and not falsely labeled** — no asset has ever been marked `RETRIEVED` without genuine provenance. |
+| 10 | **Remaining blockers to approval** | **None found.** The Wikimedia/`RETRIEVED`-strategy item (#9) is a normal, expected production-phase task — it will make the *first real production run*'s Production QA return `REVISION_REQUIRED` for those two assets specifically until resolved (real retrieval, `HUMAN_PROVIDED` with the found Pasteur portrait, or reclassifying to `GENERATED_RECONSTRUCTION`/diagram per the script's own stated visual requirements) — it does not block the approval decision itself, which is about editorial/Safety/Originality readiness. |
+| 11 | **Exact action required from the owner** | **Content review is complete and this package is READY FOR OWNER APPROVAL.** If you approve, the action is: set `CONTENT_ITEM.md`'s `Current status` to `APPROVED` yourself, or explicitly instruct this system to do so on your behalf — **this system will not do so on its own authority under any other instruction.** No production, no publishing, and no further state change happens automatically as a result of approval alone. |
+
+---
+
 ## 1. Editorial
 
 **What is the episode about?** A short-form explainer asking: how might
@@ -268,7 +291,30 @@ item or any other comparison. 8 new regression tests
 this.
 
 **Re-ran 2026-09-08 with the exception now representable** —
-`reviews/originality_reviewer-2.md`.
+`reviews/originality_reviewer-2.md`, verdict `PASS`.
+
+**A second, independent bug found and fixed, 2026-09-09** — while
+preparing the Final Owner Approval Checklist above, a direct re-hash of
+this item's reviewed content no longer matched `originality_reviewer-2.md`'s
+own stored hash, even though nothing about the reviewed content had
+changed. Root cause: `agents/originality/src/hashing.py`'s `compute_
+reviewed_content_hash()` hashed the *entire* `CONTENT_ITEM.md` file,
+including the `Originality state` field and Notes/history-log line this
+agent's own apply step writes *immediately after* computing that hash —
+the identical self-invalidation bug already found and fixed for Safety
+(see the 2026-09-05 Notes/history-log entry), independently present and
+unfixed in Originality. This defeated `agents/orchestrator/src/
+freshness.py`'s generic PASS-reuse check for Originality specifically —
+every fresh `PASS` looked stale the instant it was written, forcing an
+unnecessary re-run every time. Fixed by scoping the hash to the Identity
+and Originality-context sections only (mirroring Safety's exact fix) —
+the only two sections `signals.py` actually reads from `CONTENT_ITEM.md`.
+4 new regression tests
+(`agents/originality/tests/test_hash_self_invalidation_fix.py`) prove
+the stored hash now survives the apply step and stays sensitive to
+genuine content changes. Re-ran once more with the fix applied —
+`reviews/originality_reviewer-3.md`, verdict `PASS`, hash now verified
+to survive its own apply step for real.
 
 **Verdict: `PASS`** — `INTERNAL_DUPLICATION` is now `LOW_RISK`, with the
 raw 100% overlap and the full exception reasoning both still stated
