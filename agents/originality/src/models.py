@@ -50,13 +50,22 @@ class SignalEvaluation:
 class ChannelItemSummary:
     """Lightweight metadata for one *other* content item, used for
     INTERNAL_DUPLICATION / TEMPLATE_REPETITION comparisons. Never the
-    current item being reviewed."""
+    current item being reviewed.
+
+    `is_self_declared_engineering_fixture` is derived read-only from that
+    item's own, already-existing CONTENT_ITEM.md text (see
+    loader.py's `_ENGINEERING_FIXTURE_MARKERS`) — never a field any agent
+    writes, and never requires editing a fixture's file. See
+    signals.py's `check_internal_duplication` "Acknowledged internal
+    engineering fixture exception" for the only place this is used.
+    """
 
     content_id: str
     title: str
     premise: str
     hook: str
     beat_count: int = 0
+    is_self_declared_engineering_fixture: bool = False
 
 
 @dataclass
@@ -70,6 +79,7 @@ class OriginalityBundle:
     script_claim_ids: list
     channel_index: list  # list[ChannelItemSummary], excludes the current item
     reference_texts: dict  # {path_str: text} of supplied comparison material
+    acknowledged_internal_fixture: str = ""  # this item's own declared exact content ID, or "" — see CONTRACT.md
 
 
 @dataclass

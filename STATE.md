@@ -2031,3 +2031,71 @@ and Originality result — nothing here is inferred or fabricated.
 **Full suite: 622/622 passing, unchanged** (no code was modified this
 follow-up — only real content-review artifacts on the canonical
 episode).
+
+## Completed (Phase 8 follow-up 11: Originality's INTERNAL_DUPLICATION resolved via a new, narrow architecture exception)
+
+Investigated whether Episode 1's `INTERNAL_DUPLICATION: HIGH_RISK`
+finding (100% topic/premise overlap with the `wi-20260902-black-death-
+modern-medicine` engineering fixture it was deliberately built from) was
+a legitimate blocker or an expected internal-development relationship.
+Direct inspection of `agents/originality/src/signals.py`/`loader.py`/
+`models.py` confirmed the architecture had **no existing concept**
+of "this comparison doesn't count" — `check_internal_duplication`
+compared unconditionally against every other channel item, with no
+allowlist, exception, or fixture-identity concept anywhere. Reported as
+a genuine architectural gap rather than worked around.
+
+**Smallest safe fix implemented**: a new, optional `Acknowledged
+internal fixture` field, added to a NEW `## Originality context` section
+in `templates/CONTENT_ITEM.md` — deliberately kept **out of** the
+`## Identity` section, since `agents/safety/src/hashing.py`'s content
+hash is scoped to Identity specifically and this field must never
+invalidate an existing human Safety signoff just by existing (verified
+directly: Episode 1's Safety hash measured identical, `6317c7ae...`,
+before and after this change). The exception in
+`check_internal_duplication` applies **only** when BOTH, independently,
+hold: (1) the reviewed item's own `CONTENT_ITEM.md` explicitly declares
+the exact triggering content ID, and (2) the matched item is
+independently, structurally self-identified as an internal engineering/
+schema-validation fixture from its own **already-existing** text (the
+literal markers `"Golden sample per"` + `"Schema validation exercise"`
+the real golden sample has carried since Phase 3) — **no edit to the
+golden sample itself was ever needed or made**, preserving the "golden
+sample never mutated" invariant this project has enforced since Phase 3.
+The resulting `SignalEvaluation` stays `LOW_RISK` but its `reason` text
+still states the raw overlap percentage and the full exception
+reasoning — the review record never reads as a bare, unexplained pass.
+Fully documented in `agents/originality/CONTRACT.md`'s new "Acknowledged
+internal engineering fixture exception" section, including an explicit
+"What this exception is NOT" list (not global, not a threshold change,
+not silent, not usable against `EXTERNAL_SIMILARITY_RISK`, not a license
+to declare arbitrary relationships).
+
+**8 new regression tests**
+(`agents/originality/tests/test_internal_fixture_exception.py`) prove:
+the exact declared relationship is honored (`LOW_RISK`, auditable
+reason); a real fixture's marker alone is never sufficient without the
+reviewed item's own declaration; a declared ID that doesn't match an
+independently-recognized fixture still blocks; a declared ID that
+doesn't match the actual triggering item still blocks;
+`EXTERNAL_SIMILARITY_RISK` is completely unaffected by any acknowledgment;
+and the real, on-disk golden sample and Episode 1 are correctly
+recognized/not-recognized respectively by the marker-detection logic.
+All 31 pre-existing Originality tests continue to pass unchanged. **Full
+suite: 630/630 passing** (622 + 8 new).
+
+Episode 1's own `CONTENT_ITEM.md` now declares
+`Acknowledged internal fixture = wi-20260902-black-death-modern-medicine`
+in its new Originality context section, with the reasoning also recorded
+in prose in its Notes / history log. `continue_after_human_safety_review()`
+was re-run for real (`apply=True`): Safety signoff still verified
+`CLEARED` (unaffected, exactly as before), and `ORIGINALITY_REVIEW` now
+genuinely returns **`PASS`** (`reviews/originality_reviewer-2.md`) —
+every other signal unchanged from attempt #1. `CONTENT_ITEM.md`'s
+`Safety state` field correctly still reads `REVISION_REQUIRED` (the
+automated verdict, never touched); `Originality state` is now `PASS`;
+`Current status` remains `SCRIPT` — never set to `APPROVED`, since that
+remains entirely the human owner's own, separate, later decision.
+`HUMAN_REVIEW.md` updated to reflect all of this. Golden sample and
+canonical Episode 1 approval state confirmed untouched throughout
+(`git status --porcelain` checked at every step).

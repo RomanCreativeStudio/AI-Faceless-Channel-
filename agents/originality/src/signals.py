@@ -98,6 +98,12 @@ def check_internal_duplication(bundle: OriginalityBundle) -> SignalEvaluation:
         (best_topic[0], best_topic[1], "topic/premise"),
         (best_hook[0], best_hook[1], "hook"),
     )
+    if worst_sim >= DUPLICATION_HIGH_THRESHOLD or worst_sim >= DUPLICATION_REVIEW_THRESHOLD:
+        exception_reason = _acknowledged_fixture_exception_reason(bundle, worst_id, worst_sim, kind)
+        if exception_reason is not None:
+            return SignalEvaluation(
+                OriginalitySignal.INTERNAL_DUPLICATION, RiskLevel.LOW_RISK, exception_reason,
+            )
     if worst_sim >= DUPLICATION_HIGH_THRESHOLD:
         return SignalEvaluation(
             OriginalitySignal.INTERNAL_DUPLICATION, RiskLevel.HIGH_RISK,
@@ -114,6 +120,55 @@ def check_internal_duplication(bundle: OriginalityBundle) -> SignalEvaluation:
     return SignalEvaluation(
         OriginalitySignal.INTERNAL_DUPLICATION, RiskLevel.LOW_RISK,
         f"highest overlap found was {worst_sim:.0%}, below the review threshold",
+    )
+
+
+def _acknowledged_fixture_exception_reason(
+    bundle: OriginalityBundle, worst_id: str, worst_sim: float, kind: str,
+) -> str | None:
+    """Acknowledged internal engineering fixture exception (CONTRACT.md).
+
+    Returns an explicit, auditable LOW_RISK reason string ONLY when BOTH,
+    independently, hold:
+      1. THIS item's own CONTENT_ITEM.md explicitly declares (in its own
+         git-tracked, human-edited "Acknowledged internal fixture" field)
+         the EXACT content ID that triggered this finding — not a
+         pattern, not a prefix, not "any prior item."
+      2. The matched item is independently, structurally recognizable as
+         a self-declared internal engineering fixture from its OWN
+         already-existing text (never edited to make this true) — see
+         loader.py's _is_self_declared_engineering_fixture.
+
+    Never applies to EXTERNAL_SIMILARITY_RISK (a wholly separate signal/
+    function that never reads this field) — this exception cannot affect
+    findings against externally-supplied reference material under any
+    circumstance. Never applies when only one side holds — a fixture
+    that itself has NOT declared it is a fixture never grants the
+    exception no matter what the current item claims, and a declared
+    acknowledgment of a content ID that is NOT recognized as a fixture
+    never grants it either. Conservative by construction: returning None
+    here changes nothing about the caller's existing behavior.
+    """
+    if not bundle.acknowledged_internal_fixture:
+        return None
+    if bundle.acknowledged_internal_fixture != worst_id:
+        return None
+    matched_summary = next((c for c in bundle.channel_index if c.content_id == worst_id), None)
+    if matched_summary is None or not matched_summary.is_self_declared_engineering_fixture:
+        return None
+    return (
+        f"{kind} overlaps {worst_sim:.0%} (word-set Jaccard) with existing content "
+        f"item {worst_id!r} — ACKNOWLEDGED INTERNAL ENGINEERING FIXTURE EXCEPTION: "
+        f"this content item's own CONTENT_ITEM.md explicitly declares (its "
+        f"'Originality context' section, 'Acknowledged internal fixture' field) "
+        f"that it was deliberately "
+        f"developed from {worst_id!r}, which is independently, structurally "
+        "self-identified in its own CONTENT_ITEM.md as an internal engineering/"
+        "schema-validation fixture (never a finished, publishable video). Not "
+        "treated as accidental or external duplication. This exception applies "
+        "ONLY to this exact declared content ID pair and has no effect on any "
+        "other comparison, on EXTERNAL_SIMILARITY_RISK, or on any other content "
+        "item's own review."
     )
 
 

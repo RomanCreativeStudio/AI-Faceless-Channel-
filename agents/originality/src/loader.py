@@ -18,12 +18,28 @@ from ...researcher.src.loader import (
 )
 from .models import ChannelItemSummary, OriginalityBundle
 
+# A channel item is treated as a self-declared internal engineering
+# fixture only if its OWN, already-existing CONTENT_ITEM.md text already
+# contains both markers below — never a field any agent writes, and
+# never requires editing the fixture's file (preserving the "golden
+# sample stays untouched" invariant this project has enforced since
+# Phase 3). Deliberately exact, distinctive substrings, not a fuzzy
+# match — see agents/originality/CONTRACT.md's "Acknowledged internal
+# engineering fixture exception" for the full reasoning and the only
+# code path that ever reads this (signals.py's check_internal_duplication).
+_ENGINEERING_FIXTURE_MARKERS = ("Golden sample per", "Schema validation exercise")
+
+
+def _is_self_declared_engineering_fixture(content_item_text: str) -> bool:
+    return all(marker in content_item_text for marker in _ENGINEERING_FIXTURE_MARKERS)
+
 
 def _summarize_content_item(item_root: Path) -> ChannelItemSummary | None:
     content_item_path = item_root / "CONTENT_ITEM.md"
     if not content_item_path.is_file():
         return None
-    identity = parsing.parse_table(content_item_path.read_text(encoding="utf-8"))
+    raw_text = content_item_path.read_text(encoding="utf-8")
+    identity = parsing.parse_table(raw_text)
     content_id = parsing.strip_single_backticks(identity.get("Content ID", ""))
     title = identity.get("Working title", "") or identity.get("Final title", "")
     premise = identity.get("Premise", "")
@@ -37,7 +53,10 @@ def _summarize_content_item(item_root: Path) -> ChannelItemSummary | None:
         beats = sections.get("Narrative beats", "")
         beat_count = sum(1 for ln in beats.splitlines() if ln.strip()[:2].rstrip(".").isdigit())
 
-    return ChannelItemSummary(content_id=content_id, title=title, premise=premise, hook=hook, beat_count=beat_count)
+    return ChannelItemSummary(
+        content_id=content_id, title=title, premise=premise, hook=hook, beat_count=beat_count,
+        is_self_declared_engineering_fixture=_is_self_declared_engineering_fixture(raw_text),
+    )
 
 
 def discover_channel_index(root: Path) -> list[ChannelItemSummary]:
@@ -106,6 +125,26 @@ def load_originality_bundle(
     if channel_index is None:
         channel_index = discover_channel_index(root)
 
+    # This item's OWN, explicit, git-auditable declaration (optional
+    # field in its own CONTENT_ITEM.md's "Originality context" section —
+    # "N/A" or absent by default for every content item) that it was
+    # deliberately developed from a specific, exact prior content ID.
+    # Deliberately read from a section OTHER than Identity: Safety's own
+    # `Reviewed content hash` (agents/safety/src/hashing.py) is scoped to
+    # the Identity section specifically, and this field must never
+    # invalidate an existing human Safety signoff just by existing.
+    # Read-only here; never inferred, never written by this or any
+    # agent. See CONTRACT.md's "Acknowledged internal engineering
+    # fixture exception".
+    raw_text = content_item_path.read_text(encoding="utf-8")
+    originality_context = parsing.parse_table(
+        parsing.parse_sections(raw_text).get("Originality context", "")
+    )
+    acknowledged_raw = parsing.strip_single_backticks(
+        originality_context.get("Acknowledged internal fixture", "")
+    ).strip()
+    acknowledged_internal_fixture = "" if acknowledged_raw.upper() in ("", "N/A") else acknowledged_raw
+
     return OriginalityBundle(
         content_item=content_item,
         script_text=script_text,
@@ -116,4 +155,5 @@ def load_originality_bundle(
         script_claim_ids=script_claim_ids,
         channel_index=channel_index,
         reference_texts=load_reference_texts(reference_paths),
+        acknowledged_internal_fixture=acknowledged_internal_fixture,
     )

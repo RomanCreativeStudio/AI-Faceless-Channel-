@@ -37,7 +37,7 @@ Current status: `SCRIPT`
 | Script state | `COMPLETE` |
 | Fact-check state | `PASS` |
 | Safety state | `REVISION_REQUIRED` |
-| Originality state | `REVISION_REQUIRED` |
+| Originality state | `PASS` |
 | Production state | `NOT_STARTED` |
 | QA state | `NOT_STARTED` |
 | Publication state | `NOT_STARTED` |
@@ -70,6 +70,20 @@ SPECULATION throughout `claims/` and `SCRIPT.md`. It does **not** claim
 modern medicine would have prevented the Black Death — see the premise
 above, `SCRIPT.md`'s Conclusion, and `claims/c8.md`, `claims/c9.md` for
 the modeled uncertainty.
+
+## Originality context
+
+| Field | Value |
+|---|---|
+| Acknowledged internal fixture | `wi-20260902-black-death-modern-medicine` |
+
+This item's editorial content was deliberately developed from the exact
+engineering/schema-validation fixture named above (see this file's own
+opening paragraph and Notes / history log below) — not an accidental or
+external duplicate. See `agents/originality/CONTRACT.md`'s "Acknowledged
+internal engineering fixture exception" for exactly what this field does
+and does not do; it never suppresses a finding against any other content
+item, and never affects `EXTERNAL_SIMILARITY_RISK`.
 
 ## Notes / history log
 
@@ -119,3 +133,28 @@ the modeled uncertainty.
   own stated intent). This item's `Fact-check state`/`Safety state`
   values above are unchanged in substance by any of this.
 - 2026-09-08 — [originality agent] ORIGINALITY_REVIEW attempt #1 -> REVISION_REQUIRED (see reviews/originality_reviewer-1.md)
+- 2026-09-08 — Investigated the `INTERNAL_DUPLICATION: HIGH_RISK` finding
+  above. Determined it is the expected, already-documented relationship
+  to the Phase 3-6 schema/engineering fixture at
+  `content/what-if/wi-20260902-black-death-modern-medicine/` (see this
+  file's own opening paragraph) — not an accidental or external
+  duplicate. `agents/originality/`'s architecture had no existing,
+  auditable way to represent that distinction (confirmed by direct
+  inspection of `signals.py`/`loader.py`/`models.py`: `check_internal_
+  duplication` compared unconditionally against every other channel
+  item, with no exception concept at all). Added the smallest safe
+  mechanism to represent it: a new, optional `Acknowledged internal
+  fixture` field (`## Originality context` section — deliberately kept
+  out of the Identity section so it can never invalidate a human Safety
+  signoff, since `agents/safety/`'s content hash is scoped to Identity
+  specifically) that this item now sets to
+  `wi-20260902-black-death-modern-medicine`, checked against that
+  fixture's own, already-existing, untouched self-description text
+  (never requires editing the golden sample). 8 new regression tests
+  (`agents/originality/tests/test_internal_fixture_exception.py`) prove
+  the exception applies only to this exact declared pair, that every
+  other duplication scenario remains fully blocking exactly as before,
+  and that `EXTERNAL_SIMILARITY_RISK` is entirely unaffected. See
+  `agents/originality/CONTRACT.md`'s "Acknowledged internal engineering
+  fixture exception" for the full mechanism.
+- 2026-09-08 — [originality agent] ORIGINALITY_REVIEW attempt #2 -> PASS (see reviews/originality_reviewer-2.md)

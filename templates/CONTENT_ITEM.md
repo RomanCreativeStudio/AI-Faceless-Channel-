@@ -92,6 +92,25 @@ separate KNOWN FACT / ASSUMPTION / INFERENCE / SPECULATION per
 `CONSTITUTION.md` rule 4. Hypothetical conclusions must never be presented
 as established fact. See `templates/CLAIM.md` and `templates/SCRIPT.md`.
 
+## Originality context
+
+Deliberately **outside** the Identity section — `agents/safety/src/hashing.py`'s
+`Reviewed content hash` is scoped to Identity specifically, and this
+field must never invalidate a human Safety signoff just by existing.
+
+| Field | Value |
+|---|---|
+| Acknowledged internal fixture | `N/A` \| `<exact Content ID of a prior internal engineering/schema-validation fixture this item was deliberately developed from>` |
+
+Optional, defaults to `N/A`. Set it only when this item was genuinely,
+deliberately built from a specific prior internal engineering/schema-
+validation fixture (never a real published or in-progress content item,
+and never set merely to make an `ORIGINALITY_REVIEW` finding go away) —
+see `agents/originality/CONTRACT.md`'s "Acknowledged internal
+engineering fixture exception" for exactly what this does and does not
+do. State the reason in this item's own Notes / history log as well, in
+prose.
+
 ## Notes / history log
 
 `<append-only log of major decisions, revisions, and state transitions>`

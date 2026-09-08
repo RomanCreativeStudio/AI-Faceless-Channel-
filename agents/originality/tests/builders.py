@@ -14,11 +14,25 @@ def write_content_item(
     title: str = "How a Small Bakery Chain Expanded Regionally",
     premise: str = "A regional bakery chain grew from one shop to forty "
                     "locations by focusing on a single distinctive product line.",
+    acknowledged_internal_fixture: str = "N/A",
+    is_engineering_fixture: bool = False,
 ) -> None:
+    """`is_engineering_fixture=True` reproduces, verbatim, the exact two
+    marker phrases the real golden sample's own CONTENT_ITEM.md has
+    carried since Phase 3 (`Golden sample per`, `Schema validation
+    exercise`) — used only to build a test double that
+    `_is_self_declared_engineering_fixture` genuinely recognizes, never
+    to modify the real fixture itself.
+    """
+    fixture_preamble = (
+        "Golden sample per `templates/CONTENT_ITEM.md`. **Schema validation "
+        "exercise, not a finished video.**\n\n"
+        if is_engineering_fixture else ""
+    )
     (root / "CONTENT_ITEM.md").write_text(
         f"""# Content Item: {title} (test fixture)
 
-## Identity
+{fixture_preamble}## Identity
 
 | Field | Value |
 |---|---|
@@ -41,6 +55,12 @@ Current status: `SCRIPT`
 | Fact-check state | `NOT_STARTED` |
 | Safety state | `NOT_STARTED` |
 | Originality state | `NOT_STARTED` |
+
+## Originality context
+
+| Field | Value |
+|---|---|
+| Acknowledged internal fixture | `{acknowledged_internal_fixture}` |
 
 ## Notes / history log
 
@@ -157,10 +177,16 @@ def build_minimal_item(
     title: str = "How a Small Bakery Chain Expanded Regionally",
     premise: str = "A regional bakery chain grew from one shop to forty "
                     "locations by focusing on a single distinctive product line.",
+    acknowledged_internal_fixture: str = "N/A",
+    is_engineering_fixture: bool = False,
     **script_kwargs,
 ) -> None:
     root.mkdir(parents=True, exist_ok=True)
-    write_content_item(root, content_id=content_id, pillar=pillar, title=title, premise=premise)
+    write_content_item(
+        root, content_id=content_id, pillar=pillar, title=title, premise=premise,
+        acknowledged_internal_fixture=acknowledged_internal_fixture,
+        is_engineering_fixture=is_engineering_fixture,
+    )
     write_claim(root, "c1", content_id=content_id, classification="FACT",
                 supporting_sources="`research/01-source.md`")
     write_script(root, content_id=content_id, **script_kwargs)

@@ -138,6 +138,68 @@ agents/researcher and agents/safety" for why):
 - `HIGH_RISK` — a strong, clear structural/lexical overlap or dependence
   indicator was found.
 
+## Acknowledged internal engineering fixture exception
+
+`INTERNAL_DUPLICATION` compares a content item against every other item
+under `content/`, with no default concept of "this one doesn't count."
+That is deliberate — see "Core principle" — but it means a content item
+genuinely, deliberately developed *from* an internal engineering/schema-
+validation fixture (never a real published or in-progress item) would
+otherwise always read as a `HIGH_RISK` duplicate of the very fixture it
+was built from. This is the one, narrowly-scoped exception to that rule.
+
+**The exception applies only when BOTH, independently, hold** — checked
+live by `signals.py`'s `check_internal_duplication` on every run, never
+cached or assumed:
+
+1. The reviewed item's own `CONTENT_ITEM.md` explicitly declares, in its
+   `Originality context` section's `Acknowledged internal fixture`
+   field (`templates/CONTENT_ITEM.md` — deliberately **not** the
+   Identity section, since `agents/safety/src/hashing.py`'s `Reviewed
+   content hash` is scoped to Identity specifically and this field must
+   never invalidate an existing human Safety signoff just by existing),
+   the **exact** Content ID that triggered the finding — not a prefix,
+   not a pattern, not "any prior item." This is a real, git-tracked,
+   human-visible edit to the reviewed item's own file — never inferred,
+   never written automatically by any agent.
+2. The matched item is independently, structurally self-identified as
+   an internal engineering/schema-validation fixture, from its own
+   already-existing `CONTENT_ITEM.md` text (`loader.py`'s
+   `_is_self_declared_engineering_fixture` — checks for the literal
+   markers `"Golden sample per"` and `"Schema validation exercise"`).
+   This never requires editing the fixture's own file — the golden
+   sample at `content/what-if/wi-20260902-black-death-modern-medicine/`
+   has carried this exact self-description since Phase 3 and stays
+   untouched by this mechanism, preserving the "golden sample never
+   mutated" invariant this project has enforced since then.
+
+**What this exception is NOT:**
+
+- Not a global suppression. It narrows exactly one `(reviewed item,
+  matched content ID)` pair per declaration — every other comparison
+  (against every other channel item, for every other signal) is
+  evaluated exactly as before.
+- Not a threshold change. `DUPLICATION_HIGH_THRESHOLD`/
+  `DUPLICATION_REVIEW_THRESHOLD` are untouched; the raw similarity score
+  is still computed and still reported (see below), just not treated as
+  blocking for this one declared pair.
+- Not silent. The resulting `SignalEvaluation` is still `INTERNAL_
+  DUPLICATION`, and its `reason` text still states the raw overlap
+  percentage and which item it matched — the review record
+  (`reviews/originality_reviewer-<n>.md`) shows exactly what was found
+  and exactly why it wasn't blocking, never a bare `LOW_RISK` that reads
+  as "no similarity detected."
+- Not usable against `EXTERNAL_SIMILARITY_RISK` — a structurally
+  separate function that never reads `acknowledged_internal_fixture` at
+  all. Declaring an internal fixture can never suppress a finding
+  against externally-supplied reference material.
+- Not a license to declare arbitrary relationships. `Acknowledged
+  internal fixture` must describe a real, already-true, already-
+  documented relationship — see `templates/CONTENT_ITEM.md`'s own note
+  on the field. Declaring it merely to make a real duplication finding
+  disappear is exactly the kind of use this mechanism is not for, and
+  is auditable in the item's own git history if it happens.
+
 ## Verdict derivation
 
 1. Structural failure (`SCRIPT.md` cites a claim ID with no file, or a
