@@ -10,9 +10,9 @@ agent) — it summarizes that chain's real output for a human decision.
 | Field | Value |
 |---|---|
 | Content ID | `wi-20260904-black-death-modern-medicine-ep1` |
-| Package date | 2026-09-05 |
+| Package date | 2026-09-05 (Safety/Originality sections updated 2026-09-08) |
 | Current `CONTENT_ITEM.md` status | `SCRIPT` (unchanged — this system has never set `APPROVED`) |
-| Overall content-review status | **BLOCKED — human Safety review required** (see "Safety" below) |
+| Overall content-review status | **BLOCKED — Originality Review requires revision** (Safety is now human-cleared; see "Safety" and "Originality" below) |
 
 ---
 
@@ -143,11 +143,37 @@ being satisfied mechanically.
 
 ---
 
-## Human Safety Decision Required
+## Human Safety Decision — RECORDED
 
-This is the one decision this package exists to collect. Read the
-"Safety" section above (and the script itself, if you want more than the
-summary), then choose one:
+**Decision: `CLEARED`** — recorded 2026-09-08 by the content owner via
+`agents/safety/src/human_signoff_cli.py`, at
+`human_safety_signoffs/signoff-1.md`. Reviewed content hash
+`6317c7ae6b847d8fea345b392f187228de39d09111997d1e1631ff73922a526e`
+(matches this package's own documented value below — the signoff was
+recorded against the exact content state described in this document).
+
+The owner's stated reasoning: the episode treats the Black Death/plague
+as a historical and educational subject — no graphic or exploitative
+description of suffering, no sensationalized casualty framing, no
+glorification, no harmful/dangerous instructions, no deceptive framing.
+
+**What this did and did not do**: `continue_after_human_safety_review()`
+verified the signoff (decision, hash freshness, full coverage of the one
+outstanding Safety finding) and, because everything checked out, ran
+`ORIGINALITY_REVIEW` for real — see "Originality" below for its result.
+This did **not** modify `CONTENT_ITEM.md`'s `Safety state` field, which
+remains `REVISION_REQUIRED` exactly as the automated `SENSITIVE_CONTENT`
+detector left it — the automated Safety review is never edited or
+weakened by a human signoff; the signoff is a separate, permanent record
+that unblocks progression without altering what the detector itself
+found. This did **not** set `CONTENT_ITEM.md status = APPROVED` and did
+**not** authorize production or publishing — see "Approval" below.
+
+*(Original text of this section, preserved for reference — the decision
+above supersedes the open question it posed.)*
+
+Read the "Safety" section above (and the script itself, if you want more
+than the summary), then choose one:
 
 **`CLEARED`** — you have reviewed the script and visual treatment above
 and judge this historical, statistically-hedged, non-graphic treatment
@@ -211,11 +237,37 @@ nothing will retry automatically.
 
 ## 3. Originality
 
-**Not reached.** `agents/orchestrator/`'s `run_automated_review` runs
-`FACT_CHECK → SAFETY_REVIEW → ORIGINALITY_REVIEW` and correctly stops at
-the first blocking stage. Safety is currently `REVISION_REQUIRED`
-(human-gated, see above), so `ORIGINALITY_REVIEW` has not run. Its
-outcome is genuinely unknown until Safety clears.
+**Ran for real, 2026-09-08, after Safety was human-cleared** (see
+above) — `reviews/originality_reviewer-1.md`.
+
+**Verdict: `REVISION_REQUIRED`** — one finding:
+
+- `INTERNAL_DUPLICATION: HIGH_RISK` — this episode's topic/premise
+  overlaps 100% (word-set Jaccard similarity) with the existing content
+  item `wi-20260902-black-death-modern-medicine`. This is expected and
+  documented, not a surprise: Episode 1's own `CONTENT_ITEM.md` history
+  states it "adapts the editorial content originally developed and
+  reviewed as the Phase 3-6 schema/engineering fixture" at that exact
+  path. The detector cannot distinguish "deliberately built from a
+  reviewed fixture" from "accidental duplicate" — that judgment is
+  reserved for a human, per this same detector's own design intent
+  (mirroring `SENSITIVE_CONTENT`'s role for Safety).
+
+Every other Originality signal came back `LOW_RISK` or
+`NOT_APPLICABLE` — concept/framing/script/title-hook distinctiveness,
+source dependence (6 `FACT` claims across 4 distinct sources), and
+template repetition. `EXTERNAL_SIMILARITY_RISK` is `NOT_APPLICABLE`:
+this system does not perform internet-wide similarity search, so this
+result says nothing about material outside this repository.
+
+**What the human owner would need to decide here** (a separate decision
+from Safety, not yet made): whether this episode's relationship to the
+`wi-20260902-...` engineering fixture is acceptable as-is (i.e. this
+*is* the intended, real production version of that reviewed content,
+not an unintentional duplicate), or whether something should change
+before Originality can be reconsidered. This system has not made that
+call and cannot — `ORIGINALITY_REVIEW`'s own automated-fix authority
+does not extend to `INTERNAL_DUPLICATION`.
 
 ---
 
@@ -284,17 +336,23 @@ without a real, verifiable retrieval and provenance record.
 
 ## 6. Approval
 
-**HUMAN APPROVAL REQUIRED.**
+**HUMAN APPROVAL REQUIRED — updated 2026-09-08.**
 
-Two separate, sequential decisions remain, in order:
-
-1. A human must review this episode's tone and framing of real
-   historical mass-casualty content (Section 2 above) and decide whether
-   `SAFETY_REVIEW` may be recorded as cleared. This system cannot and
-   will not make this decision.
-2. Only after content review reaches a genuine `PASS` (Fact Check +
-   Safety + Originality), the human owner may consider setting
+1. ~~A human must review this episode's tone and framing... and decide
+   whether `SAFETY_REVIEW` may be recorded as cleared.~~ **Done** —
+   `CLEARED`, recorded 2026-09-08 (see "Human Safety Decision" above).
+2. Originality Review ran for real and returned `REVISION_REQUIRED`
+   (`INTERNAL_DUPLICATION` — see "Originality" above). Content review is
+   therefore **not yet a full `PASS`** — Fact-check `PASS` + Safety
+   human-cleared is not sufficient on its own; Originality's finding
+   needs its own human resolution (accept the relationship to the
+   engineering fixture as intended, or revise) before content review can
+   reach `PASS`.
+3. Only after content review reaches a genuine `PASS` (Fact Check +
+   Safety + Originality all clear) may the human owner consider setting
    `CONTENT_ITEM.md`'s `status = APPROVED`. This system has not done so
-   and will not do so on its own authority.
+   and will not do so on its own authority — `CONTENT_ITEM.md`'s
+   `Current status` remains `SCRIPT`.
 
-The episode is **not** published and **not** approved.
+The episode is **not** published and **not** approved. Clearing Safety
+is one necessary step, not the whole content-review chain.

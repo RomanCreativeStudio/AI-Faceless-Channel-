@@ -1979,3 +1979,55 @@ filename anywhere in any written record. `PRODUCTION.md`'s `Production
 status` correctly advanced `PRODUCTION_PLANNING` → `VISUAL_PLANNING`. No
 OOM (confirmed via `dmesg`). Canonical Episode 1 confirmed untouched
 throughout.
+
+## Completed (Phase 8 follow-up 10: Episode 1's human Safety signoff recorded — CLEARED)
+
+The owner recorded a `CLEARED` decision on Episode 1's real,
+still-outstanding `SENSITIVE_CONTENT` escalation, against the
+**canonical** episode (`content/what-if/wi-20260904-black-death-modern-medicine-ep1/`)
+— this is a genuine human decision, not a throwaway/isolated-copy
+validation like every voice/production experiment so far. Used the
+existing, unmodified mechanism exactly as documented in that item's own
+`HUMAN_REVIEW.md`: `agents/safety/src/human_signoff_cli.py`, which
+computed the reviewed-content hash automatically from what was actually
+on disk (`6317c7ae...`, matching the value `HUMAN_REVIEW.md` had already
+published) and wrote `human_safety_signoffs/signoff-1.md`.
+
+`agents/orchestrator/src/human_safety_continuation.py`'s
+`continue_after_human_safety_review()` was then run for real
+(`apply=True`) against the live canonical item. It verified the signoff
+(decision `CLEARED`, hash current, fully covering the one outstanding
+finding, no other blocking Safety signal live) and — because everything
+checked out — ran `ORIGINALITY_REVIEW` for real for the first time on
+this item. **The automated Safety review itself was never touched**:
+`CONTENT_ITEM.md`'s `Safety state` field correctly remains
+`REVISION_REQUIRED`, exactly as `agents/safety/`'s own pipeline last
+wrote it — confirmed directly from the code that only
+`agents/safety/src/pipeline.py` ever writes that field; the human
+signoff is a separate, permanent, parallel record that unblocks
+progression without editing or weakening the detector's own finding, per
+this follow-up's own explicit instruction.
+
+**Originality Review's real result: `REVISION_REQUIRED`** —
+`INTERNAL_DUPLICATION: HIGH_RISK` (100% word-set-Jaccard topic/premise
+overlap with the `wi-20260902-black-death-modern-medicine` engineering
+fixture Episode 1 was deliberately adapted from — expected, documented
+in Episode 1's own history log, not a new problem). Every other
+Originality signal came back `LOW_RISK`/`NOT_APPLICABLE`. This is a real
+finding requiring its own separate human resolution (accept the
+fixture relationship as intended, or revise) — not fixed or suppressed
+here, since `INTERNAL_DUPLICATION` has no automated-fix path.
+
+`CONTENT_ITEM.md`'s diff is minimal and exactly matches Originality's
+own write path: `Originality state` `NOT_STARTED` → `REVISION_REQUIRED`,
+plus one history-log line. `Current status` remains `SCRIPT` — never
+set to `APPROVED`, since content review is not yet a full `PASS`
+(Originality still blocks) and this system has no authority to set it
+regardless. No production/publication artifact exists for the canonical
+episode. `HUMAN_REVIEW.md` updated through its own normal editing (not
+part of the automated review chain) to reflect the real Safety decision
+and Originality result — nothing here is inferred or fabricated.
+
+**Full suite: 622/622 passing, unchanged** (no code was modified this
+follow-up — only real content-review artifacts on the canonical
+episode).

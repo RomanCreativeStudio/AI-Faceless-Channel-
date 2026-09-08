@@ -37,7 +37,7 @@ Current status: `SCRIPT`
 | Script state | `COMPLETE` |
 | Fact-check state | `PASS` |
 | Safety state | `REVISION_REQUIRED` |
-| Originality state | `NOT_STARTED` |
+| Originality state | `REVISION_REQUIRED` |
 | Production state | `NOT_STARTED` |
 | QA state | `NOT_STARTED` |
 | Publication state | `NOT_STARTED` |
@@ -118,3 +118,4 @@ the modeled uncertainty.
   narrowed to the Identity section only, matching the hash function's
   own stated intent). This item's `Fact-check state`/`Safety state`
   values above are unchanged in substance by any of this.
+- 2026-09-08 — [originality agent] ORIGINALITY_REVIEW attempt #1 -> REVISION_REQUIRED (see reviews/originality_reviewer-1.md)
