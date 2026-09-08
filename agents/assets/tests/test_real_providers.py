@@ -21,6 +21,7 @@ from ..src.real_providers import (
     GeneratedAssetProviderReal,
     WikimediaCommonsRetrievalProvider,
     _classify_license,
+    _title_matches_query,
 )
 
 
@@ -139,7 +140,7 @@ class WikimediaRetrievalProviderTests(unittest.TestCase):
     def test_successful_retrieval_records_real_provenance_no_fabrication(self):
         provider = WikimediaCommonsRetrievalProvider()
         responses = [
-            self._search_response(["File:Plague_map.jpg"]),
+            self._search_response(["File:Black_Death_plague_map.jpg"]),
             self._imageinfo_response("https://upload.wikimedia.org/plague_map.jpg"),
             b"fake-jpeg-bytes",
         ]
@@ -149,7 +150,7 @@ class WikimediaRetrievalProviderTests(unittest.TestCase):
         self.assertEqual(result.artifact_bytes, b"fake-jpeg-bytes")
         self.assertEqual(result.artifact_extension, "jpg")
         self.assertEqual(result.source_url, "https://commons.wikimedia.org/wiki/File:test")
-        self.assertIn("Plague_map.jpg", result.source_reference)
+        self.assertIn("Black_Death_plague_map.jpg", result.source_reference)
         # Artist HTML markup is stripped, never persisted raw.
         self.assertNotIn("<a", result.source_reference)
         self.assertEqual(result.licensing_status, "LICENSED")
@@ -157,7 +158,7 @@ class WikimediaRetrievalProviderTests(unittest.TestCase):
     def test_html_in_artist_metadata_is_stripped_not_persisted_raw(self):
         provider = WikimediaCommonsRetrievalProvider()
         responses = [
-            self._search_response(["File:Test.png"]),
+            self._search_response(["File:Test_query_photo.png"]),
             self._imageinfo_response(
                 "https://upload.wikimedia.org/test.png",
                 artist="Roger Zenner",
@@ -198,7 +199,7 @@ class WikimediaRetrievalProviderTests(unittest.TestCase):
     def test_image_download_failure_after_successful_search_fails_closed(self):
         provider = WikimediaCommonsRetrievalProvider()
         responses = [
-            self._search_response(["File:Plague_map.jpg"]),
+            self._search_response(["File:Black_Death_plague_map.jpg"]),
             self._imageinfo_response("https://upload.wikimedia.org/plague_map.jpg"),
             URLError("download failed"),
         ]
@@ -218,13 +219,72 @@ class WikimediaRetrievalProviderTests(unittest.TestCase):
         with mock.patch("time.sleep"):  # don't actually wait in tests
             responses = [
                 rate_limited,
-                self._search_response(["File:Plague_map.jpg"]),
+                self._search_response(["File:Black_Death_plague_map.jpg"]),
                 self._imageinfo_response("https://upload.wikimedia.org/plague_map.jpg"),
                 b"fake-jpeg-bytes",
             ]
             with mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_sequence(responses)):
                 result = provider.retrieve("Black Death map", "IMAGE")
         self.assertEqual(result.status, "RETRIEVED")
+
+    def test_topically_unrelated_first_hit_is_skipped_for_a_relevant_later_one(self):
+        # Regression test for a real, live-confirmed finding this phase: a
+        # query of "Black Death" against the real Wikimedia Commons search
+        # API returned an unrelated band photograph ("Darkthrone crop.png")
+        # as an earlier acceptable-format hit than any genuinely on-topic
+        # result. Reproduced here with mocked responses, matching this
+        # file's own test-safety convention (no live network call).
+        provider = WikimediaCommonsRetrievalProvider()
+        responses = [
+            self._search_response(["File:Darkthrone_crop.png", "File:Black_Death_map.jpg"]),
+            # First candidate ("Darkthrone_crop.png") must be rejected by
+            # the title-relevance filter *before* any imageinfo/download
+            # call for it -- only two more responses follow, for the
+            # second (relevant) candidate only.
+            self._imageinfo_response("https://upload.wikimedia.org/black_death_map.jpg"),
+            b"fake-jpeg-bytes",
+        ]
+        with mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_sequence(responses)):
+            result = provider.retrieve("Black Death", "IMAGE")
+        self.assertEqual(result.status, "RETRIEVED")
+        self.assertIn("Black_Death_map.jpg", result.source_reference)
+        self.assertNotIn("Darkthrone", result.source_reference)
+
+    def test_all_hits_topically_unrelated_fails_closed_never_settles(self):
+        provider = WikimediaCommonsRetrievalProvider()
+        responses = [self._search_response(["File:Darkthrone_crop.png", "File:Unrelated_photo.jpg"])]
+        with mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_sequence(responses)):
+            result = provider.retrieve("Black Death", "IMAGE")
+        self.assertEqual(result.status, "RETRIEVAL_FAILED")
+        self.assertIsNone(result.artifact_bytes)
+
+
+class TitleRelevanceFilterTests(unittest.TestCase):
+    """_title_matches_query is the conservative guard added this phase so
+    a search result sharing no wording at all with the query it matched
+    (e.g. an unrelated band photo returned for "Black Death") is never
+    silently accepted as if it were a verified match."""
+
+    def test_query_word_present_in_title_passes(self):
+        self.assertTrue(_title_matches_query("File:Louis Pasteur portrait.jpg", "Pasteur"))
+
+    def test_query_word_absent_from_title_fails(self):
+        self.assertFalse(_title_matches_query("File:Darkthrone crop.png", "Black Death"))
+
+    def test_all_significant_words_must_be_present(self):
+        # "Black" alone isn't enough if "Death" is missing -- this is the
+        # exact previously-documented mismatch (a 1930s political cartoon
+        # whose title shares "Black" but not "Death" with the query).
+        self.assertFalse(_title_matches_query("File:Carriers of the New Black Plague.jpg", "Black Death"))
+        self.assertTrue(_title_matches_query("File:The Black Death in England.jpg", "Black Death"))
+
+    def test_case_insensitive(self):
+        self.assertTrue(_title_matches_query("File:pasteur portrait.jpg", "PASTEUR"))
+
+    def test_short_stopword_only_query_never_blocks(self):
+        # Words under 4 letters (e.g. "map") aren't treated as significant
+        # on their own -- avoids over-rejecting on trivial/common words.
+        self.assertTrue(_title_matches_query("File:Anything at all.jpg", "map"))
 
 
 class LicenseClassificationTests(unittest.TestCase):

@@ -9,6 +9,7 @@ completed rather than conflicted with), and "Re-running / staleness".
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from ...producer.src.hashing import compute_script_content_hash
@@ -258,6 +259,105 @@ def _truncate_prompt(text: str, max_chars: int = 220) -> str:
     return truncated
 
 
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+_WORD_RE = re.compile(r"[A-Za-z][A-Za-z'-]*")
+
+
+def _extract_entity_phrases(text: str) -> list[str]:
+    """Deterministic, no-NLP proper-noun-candidate extraction. Within each
+    sentence, the sentence-*initial* word is skipped as a candidate (it is
+    capitalized regardless of whether it's a proper noun, e.g. "Nobody",
+    "The", "In"); every other capitalized word is a candidate, and runs of
+    consecutive candidates are joined into one phrase (e.g. "Black",
+    "Death" -> "Black Death"). Order of first appearance is preserved,
+    duplicates dropped. Never fabricates a term that isn't literally in
+    the source text — this only re-orders/re-selects substrings of it.
+    """
+    phrases: list[str] = []
+    seen: set[str] = set()
+
+    def _flush(current: list[str]) -> None:
+        if not current:
+            return
+        phrase = " ".join(current)
+        if phrase not in seen:
+            seen.add(phrase)
+            phrases.append(phrase)
+
+    for sentence in _SENTENCE_SPLIT_RE.split(text.strip()):
+        matches = list(_WORD_RE.finditer(sentence))
+        current: list[str] = []
+        prev_end: int | None = None
+        for index, match in enumerate(matches):
+            word = match.group(0)
+            if index == 0:
+                prev_end = match.end()
+                continue  # sentence-initial capitalization is not evidence of a proper noun
+            # Only merge into the running phrase if this word is truly
+            # adjacent (separated by nothing but a single space) to the
+            # previous one -- e.g. "Pasteur, Lister" has a comma between
+            # them and must stay two separate entities, not one fabricated
+            # "Pasteur Lister" phrase that never appears in the source text.
+            adjacent = sentence[prev_end:match.start()] == " "
+            prev_end = match.end()
+            if word[0].isupper() and adjacent:
+                current.append(word)
+            elif word[0].isupper():
+                _flush(current)
+                current = [word]
+            else:
+                _flush(current)
+                current = []
+        _flush(current)
+    return phrases
+
+
+def _build_retrieval_query_candidates(narration_text: str, max_chars: int = 220) -> list[str]:
+    """Ordered search queries to attempt, in turn, against a RETRIEVED-
+    strategy provider for one scene — most-specific first:
+
+    1. All extracted entities joined (in case they genuinely co-occur in
+       one real source).
+    2. Each individual entity alone, in order of first appearance.
+    3. The previous truncated-narration behavior, as the final fallback
+       when no entity was found at all (scenes with no extractable proper
+       noun behave exactly as before this fix).
+
+    This exists because a naive fixed-character truncation of the full
+    narration paragraph can silently drop the one entity name that makes a
+    search findable (confirmed live against Wikimedia Commons: beat 2's
+    narration mentions "Pasteur" only in its fourth sentence, well past a
+    220-character cutoff). It also exists because joining *every* entity
+    into one query is not reliably better either — confirmed live: the
+    combined query "Pasteur Lister Koch" surfaces mostly unrelated scanned
+    documents and an unrelated same-surname photograph, while "Pasteur"
+    alone finds a genuine, on-topic, public-domain period portrait — so a
+    single overly-specific joined query can dilute relevance below what a
+    single distinctive entity name achieves alone.
+
+    Never fabricates a term that isn't literally present in the source
+    narration text; every candidate is only a re-selection/re-ordering of
+    substrings already in it. Every candidate is a genuinely separate
+    search — nothing here invents a result, only what to search for.
+    """
+    entities = _extract_entity_phrases(narration_text)
+    if not entities:
+        return [_truncate_prompt(narration_text, max_chars)]
+
+    candidates: list[str] = []
+    if len(entities) > 1:
+        candidates.append(_truncate_prompt(" ".join(entities), max_chars))
+    candidates.extend(_truncate_prompt(e, max_chars) for e in entities)
+
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for candidate in candidates:
+        if candidate and candidate not in seen:
+            seen.add(candidate)
+            ordered.append(candidate)
+    return ordered
+
+
 def _build_plan(
     scene: SceneVisualRecord,
     filename: str,
@@ -315,7 +415,21 @@ def _build_plan(
         )
 
     if strategy is AssetStrategy.RETRIEVED:
-        retrieval = retrieval_provider.retrieve(visual_prompt, asset_type)
+        # RETRIEVED uses its own, entity-aware search queries rather than
+        # `visual_prompt` (which stays the raw truncated narration for
+        # GENERATED's illustration prompt, unchanged) -- see
+        # _build_retrieval_query_candidates' docstring for why a full-text
+        # search API needs a different construction than an illustration
+        # prompt, and why more than one candidate query is attempted, in
+        # order, until one succeeds.
+        query_candidates = _build_retrieval_query_candidates(scene.narration_text)
+        retrieval = None
+        attempted_queries: list[str] = []
+        for candidate_query in query_candidates:
+            attempted_queries.append(candidate_query)
+            retrieval = retrieval_provider.retrieve(candidate_query, asset_type)
+            if retrieval.status == "RETRIEVED" and retrieval.artifact_bytes is not None:
+                break
         if retrieval.status == "RETRIEVED" and retrieval.artifact_bytes is not None:
             retrieved_filename = f"{filename[:-3]}.retrieved.{retrieval.artifact_extension}"
             return AssetPlan(
@@ -326,10 +440,14 @@ def _build_plan(
                 generation_status="RETRIEVED",
                 verification_status="NOT_STARTED",
                 verification_notes=(
-                    f"Retrieved from {retrieval.provider_label}; license as reported by the "
-                    f"source: {retrieval.license_text!r}. Not yet human-verified — a real "
+                    f"Retrieved from {retrieval.provider_label} using search query "
+                    f"{attempted_queries[-1]!r}; license as reported by the source: "
+                    f"{retrieval.license_text!r}. Not yet human-verified — a real "
                     "retrieval having succeeded is never itself a claim of editorial "
-                    "appropriateness or license correctness."
+                    "appropriateness or license correctness; a search query matching "
+                    "the scene's own entities does not guarantee the specific result "
+                    "returned is topically accurate — human review before use is "
+                    "still required exactly as for any other RETRIEVED asset."
                 ),
                 content_hash=content_hash,
                 licensing_status=retrieval.licensing_status,
@@ -338,9 +456,8 @@ def _build_plan(
                 retrieved_artifact_bytes=retrieval.artifact_bytes,
             )
         # RETRIEVAL_NOT_IMPLEMENTED (no real provider configured) or
-        # RETRIEVAL_FAILED (a real provider tried and found nothing
-        # usable) — either way, never fabricate a source or pretend a
-        # retrieval happened.
+        # RETRIEVAL_FAILED for every candidate query attempted -- either
+        # way, never fabricate a source or pretend a retrieval happened.
         return AssetPlan(
             scene=scene, asset_id=asset_id, filename=filename, asset_type=asset_type,
             strategy=strategy, authenticity=authenticity, basis=basis,
@@ -349,7 +466,11 @@ def _build_plan(
             generation_prompt="N/A",
             generation_status="NOT_STARTED",
             verification_status="NOT_STARTED",
-            verification_notes=retrieval.requirement_note,
+            verification_notes=(
+                f"{retrieval.requirement_note} (attempted {len(attempted_queries)} "
+                f"search quer{'y' if len(attempted_queries) == 1 else 'ies'}: "
+                f"{attempted_queries!r})"
+            ),
             content_hash=content_hash,
         )
 

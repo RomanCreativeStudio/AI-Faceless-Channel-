@@ -82,6 +82,34 @@ class GeneratedAssetProviderReal:
         )
 
 
+def _title_matches_query(title: str, query: str) -> bool:
+    """Conservative, deterministic relevance guard: a search result is
+    only accepted if the query's own significant words (4+ letters, to
+    skip connectors like "of"/"the") appear, verbatim and case-
+    insensitively, in the candidate file's own title. Wikimedia's search
+    ranking can otherwise surface a same-keyword-adjacent but topically
+    unrelated file as the very first acceptable-format hit -- confirmed
+    live during this investigation: a query of "Black Death" returned an
+    unrelated band photograph ("Darkthrone crop.png") ahead of any
+    genuinely on-topic result, and a query of "Black Death" would also
+    have accepted a previously-documented mismatch (a 1930s political
+    cartoon titled "Carriers of the New Black Plague.jpg") without this
+    check, since its title lacks the word "Death" entirely.
+
+    This is a literal substring check, not a claim of editorial
+    correctness -- every retrieved asset's own `Verification status`
+    still stays `NOT_STARTED` and still requires human review before use
+    (see this class's own docstring). It only rules out results that
+    don't even share the query's own wording with their own title, never
+    upgrades a passing result to "verified."
+    """
+    title_lower = title.lower()
+    significant_words = [w for w in re.findall(r"[A-Za-z]+", query) if len(w) >= 4]
+    if not significant_words:
+        return True  # nothing significant to check against -- don't block on stopwords alone
+    return all(word.lower() in title_lower for word in significant_words)
+
+
 def _classify_license(license_text: str) -> str:
     lowered = license_text.lower()
     if any(marker in lowered for marker in _PUBLIC_DOMAIN_MARKERS):
@@ -173,6 +201,8 @@ class WikimediaCommonsRetrievalProvider:
             extension = title.rsplit(".", 1)[-1].lower() if "." in title else ""
             if extension not in _ACCEPTABLE_IMAGE_EXTENSIONS:
                 continue  # skip SVGs/other formats this MVP doesn't render for video
+            if not _title_matches_query(title, query):
+                continue  # see _title_matches_query's docstring
 
             try:
                 info = self._get_json({
